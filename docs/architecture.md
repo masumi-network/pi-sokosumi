@@ -8,7 +8,6 @@ The package owns generic Sokosumi and Masumi infrastructure:
 
 - Pi extension registration.
 - Sokosumi coworker HTTP calls.
-- Mock task-board tools for local Pi testing.
 - Task polling and task-event state mechanics.
 - Identity extraction from Sokosumi-shaped payloads.
 - Worker wiring for generic agent task handling.
@@ -27,7 +26,7 @@ The package does not own agent-specific behavior:
 
 `extensions/sokosumi/index.ts` loads environment configuration and registers Pi tools.
 
-When `SOKOSUMI_COWORKER_API_KEY` is set, the extension uses the real coworker API. Otherwise it registers in-memory mock tools.
+When `SOKOSUMI_COWORKER_API_KEY` is set, the extension uses the real coworker API. Otherwise it logs a configuration error and registers no Sokosumi tools.
 
 ### Client
 

@@ -45,7 +45,7 @@ pnpm publish
 1. Run `pnpm check`.
 2. Run `pnpm pack --dry-run` and inspect included files.
 3. Install the packed tarball into a sample Pi agent.
-4. Test mock mode.
+4. Test missing-key startup and confirm no tools are registered.
 5. Test API mode with the poller disabled.
 6. Test claim-only poller mode.
 7. Test Masumi hooks with a fake client/store or preprod credentials.

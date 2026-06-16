@@ -1,69 +1,72 @@
 // @ts-nocheck
 import type { PiExtensionAPI } from "../../src/piTypes.js";
-import { createMockSokosumiClient } from "../../src/client/mockSokosumiClient.js";
 import { createHttpSokosumiClient } from "../../src/client/httpSokosumiClient.js";
 import { createSokosumiTaskPoller } from "../../src/poller/createSokosumiTaskPoller.js";
 import { registerSokosumiCoworkerTools } from "../../src/tools/registerSokosumiCoworkerTools.js";
-import { registerSokosumiTools } from "../../src/tools/registerSokosumiTools.js";
 
 export default function sokosumiExtension(pi: PiExtensionAPI) {
   const config = loadConfig();
 
   pi.on("session_start", async (_event, ctx) => {
-    ctx.ui.notify(`pi-sokosumi loaded in ${config.extensionMode} mode`, "info");
+    if (config.extensionMode === "disabled") {
+      ctx.ui.notify("pi-sokosumi disabled: SOKOSUMI_COWORKER_API_KEY is required to register Sokosumi tools.", "error");
+      return;
+    }
+    ctx.ui.notify("pi-sokosumi loaded in api mode", "info");
   });
 
-  if (config.extensionMode === "api") {
-    const client = createHttpSokosumiClient({
-      apiUrl: config.apiUrl,
-      apiKey: config.coworkerApiKey
+  if (config.extensionMode === "disabled") {
+    logExtensionError("pi_sokosumi_missing_coworker_api_key", {
+      message: "SOKOSUMI_COWORKER_API_KEY is required; no Sokosumi tools were registered."
     });
-
-    registerSokosumiCoworkerTools(pi, client);
-
-    if (config.pollerEnabled) {
-      createSokosumiTaskPoller({
-        client,
-        intervalMs: config.pollIntervalMs,
-        limit: config.pollLimit,
-        maxPages: config.pollMaxPages,
-        shouldProcessEvent: usesDefaultReadyStatuses(config.readyStatuses)
-          ? undefined
-          : (event) => config.readyStatuses.includes(event.status) && Boolean(event.taskId),
-        hasTaskProgress: config.skipExistingProgress ? undefined : () => false,
-        createRunningEvent: config.claimEnabled
-          ? ({ event, task }) => ({
-              status: config.claimStatus,
-              origin: config.origin,
-              comment: renderTemplate(config.claimComment, { event, task })
-            })
-          : null,
-        createCompletedEvent: config.pollerMode === "complete"
-          ? ({ event, task }) => ({
-              status: config.completeStatus,
-              origin: config.origin,
-              comment: renderTemplate(config.completeComment, { event, task })
-            })
-          : undefined,
-        createFailedEvent: ({ event, task, error }) => ({
-          status: config.failStatus,
-          origin: config.origin,
-          comment: renderTemplate(config.failComment, { event, task, error })
-        })
-      }).start();
-    }
-
     return;
   }
 
-  registerSokosumiTools(pi, createMockSokosumiClient());
+  const client = createHttpSokosumiClient({
+    apiUrl: config.apiUrl,
+    apiKey: config.coworkerApiKey
+  });
+
+  registerSokosumiCoworkerTools(pi, client);
+
+  if (config.pollerEnabled) {
+    createSokosumiTaskPoller({
+      client,
+      intervalMs: config.pollIntervalMs,
+      limit: config.pollLimit,
+      maxPages: config.pollMaxPages,
+      shouldProcessEvent: usesDefaultReadyStatuses(config.readyStatuses)
+        ? undefined
+        : (event) => config.readyStatuses.includes(event.status) && Boolean(event.taskId),
+      hasTaskProgress: config.skipExistingProgress ? undefined : () => false,
+      createRunningEvent: config.claimEnabled
+        ? ({ event, task }) => ({
+            status: config.claimStatus,
+            origin: config.origin,
+            comment: renderTemplate(config.claimComment, { event, task })
+          })
+        : null,
+      createCompletedEvent: config.pollerMode === "complete"
+        ? ({ event, task }) => ({
+            status: config.completeStatus,
+            origin: config.origin,
+            comment: renderTemplate(config.completeComment, { event, task })
+          })
+        : undefined,
+      createFailedEvent: ({ event, task, error }) => ({
+        status: config.failStatus,
+        origin: config.origin,
+        comment: renderTemplate(config.failComment, { event, task, error })
+      })
+    }).start();
+  }
 }
 
 function loadConfig() {
   const coworkerApiKey = readEnv("SOKOSUMI_COWORKER_API_KEY");
 
   return {
-    extensionMode: coworkerApiKey ? "api" : "mock",
+    extensionMode: coworkerApiKey ? "api" : "disabled",
     apiUrl: readEnv("SOKOSUMI_API_URL") || "https://api.preprod.sokosumi.com",
     coworkerApiKey,
     pollerEnabled: readEnv("SOKOSUMI_TASK_POLLER_ENABLED") === "true",
@@ -122,4 +125,8 @@ function renderTemplate(template: string, values: { event?: any; task?: any; err
 
 function getPath(source: any, path: string) {
   return path.split(".").reduce((value, key) => value?.[key], source);
+}
+
+function logExtensionError(event: string, details = {}) {
+  console.error(JSON.stringify({ event, ...details }));
 }

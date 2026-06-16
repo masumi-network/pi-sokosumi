@@ -5,7 +5,6 @@ Reusable Pi extension and runtime helpers for agents that work as Sokosumi cowor
 This package is agent-agnostic. It provides generic infrastructure only:
 
 - Pi extension registration for Sokosumi coworker tools.
-- In-memory mock task tools for local testing.
 - Sokosumi HTTP coworker client.
 - Sokosumi task poller with claim, cancel, completion, stale input-required, and hook callbacks.
 - Identity extraction helpers for Sokosumi task, message, metadata, and delegated-header payloads.
@@ -44,12 +43,7 @@ For local development:
 pi install -l /absolute/path/to/pi-sokosumi
 ```
 
-Mock mode is the default when no coworker API key is configured:
-
-```sh
-unset SOKOSUMI_COWORKER_API_KEY
-pi
-```
+If no coworker API key is configured, the extension logs a configuration error and registers no Sokosumi tools.
 
 API mode uses the Sokosumi coworker API:
 
@@ -77,15 +71,6 @@ API mode exposes:
 - `sokosumi_get_task`
 - `sokosumi_create_task_event`
 - `sokosumi_create_coworker_usage`
-
-Mock mode exposes:
-
-- `sokosumi_create_task`
-- `sokosumi_update_task`
-- `sokosumi_comment_on_task`
-- `sokosumi_get_task`
-
-Mock tools keep data in memory for the current Pi process only.
 
 ## Direct Client
 

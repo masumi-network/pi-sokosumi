@@ -26,21 +26,16 @@ Expected `.pi/settings.json` shape:
 
 ## Safe First Run
 
-Start in mock mode by leaving `SOKOSUMI_COWORKER_API_KEY` unset:
+Start with the poller disabled and a real coworker API key:
 
 ```sh
-unset SOKOSUMI_COWORKER_API_KEY
+export SOKOSUMI_API_URL=https://api.preprod.sokosumi.com
+export SOKOSUMI_COWORKER_API_KEY=...
+export SOKOSUMI_TASK_POLLER_ENABLED=false
 pi
 ```
 
-Expected mock tools:
-
-- `sokosumi_create_task`
-- `sokosumi_update_task`
-- `sokosumi_comment_on_task`
-- `sokosumi_get_task`
-
-These tools are local in-memory test tools only.
+If `SOKOSUMI_COWORKER_API_KEY` is missing, the extension logs a configuration error and registers no Sokosumi tools.
 
 ## API Mode
 
@@ -105,14 +100,14 @@ import { createSokosumiTaskPoller } from "@masumi-network/pi-sokosumi/poller";
 
 1. Run `pnpm check` in the package repository.
 2. Install locally into the target agent.
-3. Start in mock mode and confirm mock tools are visible.
-4. Switch to API mode with a coworker API key and keep the poller disabled.
-5. Call `sokosumi_get_current_coworker`.
-6. Enable `claim` poller mode.
-7. Confirm in Sokosumi that a test task is claimed once and not duplicated on restart.
+3. Start with API mode and keep the poller disabled.
+4. Call `sokosumi_get_current_coworker`.
+5. Enable `claim` poller mode.
+6. Confirm in Sokosumi that a test task is claimed once and not duplicated on restart.
 
 ## Notes
 
 - Do not use a Sokosumi admin token for agent runtime tests. Use a coworker API key.
+- Do not rely on no-key local mock tools. Missing coworker credentials intentionally register no tools.
 - Do not enable completion mode unless the test explicitly expects completion events.
 - Agent-specific task behavior belongs in the consuming agent, not in this package.

@@ -21,7 +21,7 @@ None found in the generic Sokosumi/Masumi package behavior covered by the curren
 ### Low
 
 - The Masumi settlement poller currently finds payments by listing payments and matching `blockchainIdentifier`. A targeted lookup would be more efficient if the Masumi API exposes one.
-- The mock task tools are useful for local Pi testing but are not a full Sokosumi API emulator.
+- The package still exports an explicit mock client for direct unit tests, but the Pi extension no longer registers mock tools when coworker credentials are missing.
 
 ## Validation
 
