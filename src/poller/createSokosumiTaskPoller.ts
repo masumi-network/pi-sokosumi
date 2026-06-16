@@ -235,8 +235,7 @@ export function createSokosumiTaskPoller({
       processedEventIds.add(event.id);
     } catch (error) {
       const failedEvent = await createFailedEvent({ event, task: activeTask, error });
-      const taskEvent = shouldCreateCommentOnlyEvent(task, event) ? toCommentOnlyTaskEvent(failedEvent) : failedEvent;
-      if (taskEvent) await createTaskEventWithCommentFallback(event.taskId, taskEvent, event);
+      if (failedEvent) await createTaskEventWithCommentFallback(event.taskId, failedEvent, event, { allowCommentFallback: false });
       throw error;
     }
   }
@@ -257,11 +256,11 @@ export function createSokosumiTaskPoller({
     }
   }
 
-  async function createTaskEventWithCommentFallback(taskId, body, triggerEvent) {
+  async function createTaskEventWithCommentFallback(taskId, body, triggerEvent, { allowCommentFallback = true } = {}) {
     try {
       return await client.createTaskEvent(taskId, body);
     } catch (error) {
-      if (isInvalidStatusTransitionError(error) && body?.status && body?.comment) {
+      if (allowCommentFallback && isInvalidStatusTransitionError(error) && body?.status && body?.comment) {
         log(
           logger,
           "sokosumi_task_status_transition_fallback",

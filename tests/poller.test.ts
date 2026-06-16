@@ -453,6 +453,48 @@ test("Sokosumi poller strips Masumi payment data from comment-only terminal foll
   assert.equal(createdEvents[0].body.masumiPayment, undefined);
 });
 
+test("Sokosumi poller marks the task failed when coworker processing throws after prior completion", async () => {
+  const createdEvents: any[] = [];
+  const logs: any[] = [];
+  const task = {
+    id: "task-failed-after-completion",
+    status: "in_progress",
+    events: [
+      {
+        id: "event-completed-before-failure",
+        taskId: "task-failed-after-completion",
+        status: "COMPLETED",
+        origin: "SOKOSUMI",
+        coworkerId: "coworker-1",
+        createdAt: "2026-05-19T10:00:00.000Z",
+        comment: "Done."
+      },
+      {
+        id: "event-user-after-completion",
+        taskId: "task-failed-after-completion",
+        origin: "USER",
+        createdAt: "2026-05-19T10:05:00.000Z",
+        comment: "Continue this task."
+      }
+    ]
+  };
+  const poller = createSokosumiTaskPoller({
+    client: createSingleTaskClient({ task, createdEvents }),
+    intervalMs: 1000,
+    logger: createJsonLogger(logs),
+    createCompletedEvent: async () => {
+      throw new Error("provider unavailable");
+    }
+  });
+
+  await poller.tick();
+
+  assert.equal(createdEvents.length, 1);
+  assert.equal(createdEvents[0].body.status, "FAILED");
+  assert.match(createdEvents[0].body.comment, /provider unavailable/);
+  assert.ok(logs.some((entry) => entry.event === "sokosumi_task_event_error"));
+});
+
 test("Sokosumi poller skips missing task snapshots without blocking valid events", async () => {
   const createdEvents: any[] = [];
   const logs: any[] = [];

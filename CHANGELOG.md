@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- Changed coworker failure handling so thrown task-processing errors post a `FAILED` task event instead of being downgraded to a comment-only event after prior terminal history.
+- Disabled comment-only invalid-transition fallback for failed events so task status is not silently left successful when processing failed.
+
 ## 0.1.2
 
 - Stripped `masumiPayment` from comment-only task-event fallbacks because Sokosumi only allows payment metadata on `COMPLETED` events.
