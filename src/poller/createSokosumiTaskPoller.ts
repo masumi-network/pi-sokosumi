@@ -267,7 +267,7 @@ export function createSokosumiTaskPoller({
           "sokosumi_task_status_transition_fallback",
           { eventId: triggerEvent?.id, taskId, status: body.status, reason: "invalid_status_transition" }
         );
-        const { status, ...commentOnlyBody } = body;
+        const { status, masumiPayment, ...commentOnlyBody } = body;
         return client.createTaskEvent(taskId, commentOnlyBody);
       }
       throw error;
@@ -501,7 +501,7 @@ function toCommentOnlyTaskEvent(taskEvent) {
   if (!taskEvent?.status) return taskEvent;
   if (!taskEvent.comment) return undefined;
 
-  const { status, ...commentOnlyEvent } = taskEvent;
+  const { status, masumiPayment, ...commentOnlyEvent } = taskEvent;
   return commentOnlyEvent;
 }
 

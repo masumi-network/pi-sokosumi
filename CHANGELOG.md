@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+- Stripped `masumiPayment` from comment-only task-event fallbacks because Sokosumi only allows payment metadata on `COMPLETED` events.
+- Added regression coverage for invalid terminal-transition fallback and terminal follow-up comment-only events carrying payment metadata.
+
 ## 0.1.1
 
 - Changed Pi extension startup without `SOKOSUMI_COWORKER_API_KEY` to log a configuration error and register no Sokosumi tools.

@@ -340,6 +340,119 @@ test("Sokosumi poller falls back to comment-only events on invalid terminal tran
   assert.equal(createdEvents[1].body.comment, "Completion text should still be posted.");
 });
 
+test("Sokosumi poller strips Masumi payment data from comment-only fallback events", async () => {
+  const attempts: any[] = [];
+  const createdEvents: any[] = [];
+  const task = {
+    id: "task-payment-fallback",
+    status: "READY",
+    events: [
+      {
+        id: "event-payment-fallback",
+        taskId: "task-payment-fallback",
+        status: "READY",
+        origin: "USER",
+        createdAt: "2026-05-19T10:00:00.000Z",
+        comment: "Process this."
+      }
+    ]
+  };
+  const poller = createSokosumiTaskPoller({
+    client: createSingleTaskClient({
+      task,
+      createdEvents,
+      async createTaskEvent(taskId: string, body: any) {
+        attempts.push({ taskId, body });
+        if (body.status === "COMPLETED") {
+          throw new Error("invalid status transition");
+        }
+        if (body.masumiPayment) {
+          throw new Error("masumiPayment is only allowed when status is COMPLETED");
+        }
+        const created = { id: `created-${createdEvents.length + 1}`, taskId, ...body };
+        createdEvents.push({ taskId, body, created });
+        return created;
+      }
+    }),
+    intervalMs: 1000,
+    logger: { log() {}, error() {} },
+    createCompletedEvent: async () => ({
+      status: "COMPLETED",
+      origin: "SOKOSUMI",
+      comment: "Completion text should still be posted.",
+      masumiPayment: {
+        id: "payment-comment-fallback"
+      }
+    })
+  });
+
+  await poller.tick();
+
+  assert.deepEqual(
+    attempts.map((event) => event.body.status || "comment-only"),
+    ["RUNNING", "COMPLETED", "comment-only"]
+  );
+  assert.equal(createdEvents[1].body.comment, "Completion text should still be posted.");
+  assert.equal(createdEvents[1].body.masumiPayment, undefined);
+});
+
+test("Sokosumi poller strips Masumi payment data from comment-only terminal follow-ups", async () => {
+  const createdEvents: any[] = [];
+  const task = {
+    id: "task-comment-only-payment",
+    status: "in_progress",
+    events: [
+      {
+        id: "event-completed-before",
+        taskId: "task-comment-only-payment",
+        status: "COMPLETED",
+        origin: "SOKOSUMI",
+        coworkerId: "coworker-1",
+        createdAt: "2026-05-19T10:00:00.000Z",
+        comment: "Done."
+      },
+      {
+        id: "event-user-follow-up",
+        taskId: "task-comment-only-payment",
+        origin: "USER",
+        createdAt: "2026-05-19T10:05:00.000Z",
+        comment: "One more note."
+      }
+    ]
+  };
+  const poller = createSokosumiTaskPoller({
+    client: createSingleTaskClient({
+      task,
+      createdEvents,
+      async createTaskEvent(taskId: string, body: any) {
+        if (body.masumiPayment) {
+          throw new Error("masumiPayment is only allowed when status is COMPLETED");
+        }
+        const created = { id: `created-${createdEvents.length + 1}`, taskId, ...body };
+        createdEvents.push({ taskId, body, created });
+        return created;
+      }
+    }),
+    intervalMs: 1000,
+    logger: { log() {}, error() {} },
+    createCompletedEvent: async () => ({
+      status: "COMPLETED",
+      origin: "SOKOSUMI",
+      comment: "Comment text should still be posted.",
+      masumiPayment: {
+        id: "payment-comment-only"
+      }
+    })
+  });
+
+  await poller.tick();
+
+  assert.equal(createdEvents.length, 1);
+  assert.equal(createdEvents[0].body.status, undefined);
+  assert.equal(createdEvents[0].body.comment, "Comment text should still be posted.");
+  assert.equal(createdEvents[0].body.masumiPayment, undefined);
+});
+
 test("Sokosumi poller skips missing task snapshots without blocking valid events", async () => {
   const createdEvents: any[] = [];
   const logs: any[] = [];
