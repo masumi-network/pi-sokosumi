@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- Added `updateTask` to the HTTP Sokosumi client so the real client matches the shared client contract.
+- Recovered rejected status-event transitions by patching the task status and preserving the user-visible comment, allowing terminal tasks restarted by user input to move back through running/completed states.
+
 ## 0.1.3
 
 - Changed coworker failure handling so thrown task-processing errors post a `FAILED` task event instead of being downgraded to a comment-only event after prior terminal history.

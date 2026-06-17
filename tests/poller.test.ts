@@ -340,6 +340,85 @@ test("Sokosumi poller falls back to comment-only events on invalid terminal tran
   assert.equal(createdEvents[1].body.comment, "Completion text should still be posted.");
 });
 
+test("Sokosumi poller patches task status when restarted terminal task events are rejected", async () => {
+  const createdEvents: any[] = [];
+  const hookCalls: any[] = [];
+  const logs: any[] = [];
+  const patchedStatuses: string[] = [];
+  const task = {
+    id: "task-terminal-restart",
+    status: "FAILED",
+    events: [
+      {
+        id: "event-failed-before-restart",
+        taskId: "task-terminal-restart",
+        status: "FAILED",
+        origin: "SOKOSUMI",
+        coworkerId: "coworker-1",
+        createdAt: "2026-05-19T10:00:00.000Z",
+        comment: "Failed."
+      },
+      {
+        id: "event-user-retry",
+        taskId: "task-terminal-restart",
+        origin: "USER",
+        createdAt: "2026-05-19T10:05:00.000Z",
+        comment: "Try again now please."
+      }
+    ]
+  };
+  const poller = createSokosumiTaskPoller({
+    client: {
+      ...createSingleTaskClient({
+        task,
+        createdEvents,
+        async createTaskEvent(taskId: string, body: any) {
+          if (body.status) {
+            throw new Error("invalid status transition");
+          }
+          const created = { id: `created-${createdEvents.length + 1}`, taskId, ...body };
+          createdEvents.push({ taskId, body, created });
+          return created;
+        }
+      }),
+      async updateTask({ taskId, status }: any) {
+        assert.equal(taskId, task.id);
+        patchedStatuses.push(status);
+        task.status = status;
+        return { ...task };
+      }
+    },
+    intervalMs: 1000,
+    logger: createJsonLogger(logs),
+    createRunningEvent: () => ({
+      status: "RUNNING",
+      origin: "SOKOSUMI"
+    }),
+    createCompletedEvent: async () => ({
+      status: "COMPLETED",
+      origin: "SOKOSUMI",
+      comment: "Retry succeeded."
+    }),
+    afterTaskEventCreated: async (input) => {
+      hookCalls.push(input);
+    }
+  });
+
+  await poller.tick();
+
+  assert.deepEqual(patchedStatuses, ["in_progress", "in_progress", "done"]);
+  assert.equal(task.status, "done");
+  assert.deepEqual(
+    createdEvents.map((event) => event.body.status || "comment-only"),
+    ["comment-only", "comment-only"]
+  );
+  assert.match(createdEvents[0].body.comment, /reopened/i);
+  assert.equal(createdEvents[1].body.comment, "Retry succeeded.");
+  assert.equal(hookCalls.length, 1);
+  assert.equal(hookCalls[0].createdTaskEvent.status, "COMPLETED");
+  assert.ok(logs.some((entry) => entry.event === "sokosumi_task_status_transition_recovered" && entry.taskStatus === "done"));
+});
+
 test("Sokosumi poller strips Masumi payment data from comment-only fallback events", async () => {
   const attempts: any[] = [];
   const createdEvents: any[] = [];

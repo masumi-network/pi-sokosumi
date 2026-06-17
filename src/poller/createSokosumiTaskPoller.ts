@@ -245,6 +245,11 @@ export function createSokosumiTaskPoller({
       return await client.createTaskEvent(taskId, body);
     } catch (error) {
       if (isInvalidStatusTransitionError(error) && body?.status) {
+        const recoveredTaskEvent = await recoverInvalidStatusTransition(taskId, body, triggerEvent, {
+          allowCommentFallback: true
+        });
+        if (recoveredTaskEvent) return recoveredTaskEvent;
+
         log(
           logger,
           "sokosumi_task_status_transition_skipped",
@@ -260,6 +265,13 @@ export function createSokosumiTaskPoller({
     try {
       return await client.createTaskEvent(taskId, body);
     } catch (error) {
+      if (isInvalidStatusTransitionError(error) && body?.status) {
+        const recoveredTaskEvent = await recoverInvalidStatusTransition(taskId, body, triggerEvent, {
+          allowCommentFallback
+        });
+        if (recoveredTaskEvent) return recoveredTaskEvent;
+      }
+
       if (allowCommentFallback && isInvalidStatusTransitionError(error) && body?.status && body?.comment) {
         log(
           logger,
@@ -270,6 +282,56 @@ export function createSokosumiTaskPoller({
         return client.createTaskEvent(taskId, commentOnlyBody);
       }
       throw error;
+    }
+  }
+
+  async function recoverInvalidStatusTransition(taskId, body, triggerEvent, { allowCommentFallback = true } = {}) {
+    if (!body?.status || typeof client.updateTask !== "function") return undefined;
+    if (body.comment && !allowCommentFallback) return undefined;
+
+    const taskStatus = toSokosumiTaskStatus(body.status);
+    if (!taskStatus) return undefined;
+
+    try {
+      const updatedTask = await client.updateTask({ taskId, status: taskStatus });
+      let commentEvent;
+      if (body.comment) {
+        const { status, masumiPayment, ...commentOnlyBody } = body;
+        commentEvent = await client.createTaskEvent(taskId, commentOnlyBody);
+      }
+
+      log(
+        logger,
+        "sokosumi_task_status_transition_recovered",
+        { eventId: triggerEvent?.id, taskId, status: body.status, taskStatus }
+      );
+
+      return {
+        taskId,
+        ...(commentEvent || {}),
+        ...body,
+        status: body.status,
+        metadata: {
+          ...(body.metadata || {}),
+          ...(commentEvent?.metadata || {}),
+          sokosumiRecoveredTaskStatus: true,
+          taskStatus: updatedTask?.status || taskStatus
+        }
+      };
+    } catch (recoveryError) {
+      log(
+        logger,
+        "sokosumi_task_status_transition_recovery_failed",
+        {
+          eventId: triggerEvent?.id,
+          taskId,
+          status: body.status,
+          taskStatus,
+          message: recoveryError.message
+        },
+        "warn"
+      );
+      return undefined;
     }
   }
 
@@ -628,6 +690,30 @@ function hasItems(value) {
 
 function isInvalidStatusTransitionError(error) {
   return /invalid status transition/i.test(String(error?.message || ""));
+}
+
+function toSokosumiTaskStatus(status) {
+  switch (normalizeStatus(status)) {
+    case SOKOSUMI_TASK_EVENT_STATUS.DRAFT:
+      return "draft";
+    case SOKOSUMI_TASK_EVENT_STATUS.READY:
+    case SOKOSUMI_TASK_EVENT_STATUS.RUNNING:
+    case SOKOSUMI_TASK_EVENT_STATUS.AWAITING_EXTERNAL:
+    case SOKOSUMI_TASK_EVENT_STATUS.CREDITS_TOPPED_UP:
+      return "in_progress";
+    case SOKOSUMI_TASK_EVENT_STATUS.INPUT_REQUIRED:
+    case SOKOSUMI_TASK_EVENT_STATUS.AUTHENTICATION_REQUIRED:
+    case SOKOSUMI_TASK_EVENT_STATUS.OUT_OF_CREDITS:
+    case SOKOSUMI_TASK_EVENT_STATUS.CANCEL_REQUESTED:
+      return "awaiting_approval";
+    case SOKOSUMI_TASK_EVENT_STATUS.COMPLETED:
+    case "DONE":
+      return "done";
+    case SOKOSUMI_TASK_EVENT_STATUS.FAILED:
+      return "failed";
+    default:
+      return undefined;
+  }
 }
 
 function normalizeStatus(status) {

@@ -24,6 +24,16 @@ export function createHttpSokosumiClient({ apiUrl, apiKey, fetchImpl = fetch, ti
       return result.data;
     },
 
+    async updateTask(input = {}) {
+      const { taskId, ...body } = input;
+      if (!taskId) throw new Error("Sokosumi task id is required.");
+      const result = await request(`/v1/tasks/${encodeURIComponent(taskId)}`, {
+        method: "PATCH",
+        body
+      });
+      return result.data;
+    },
+
     async getUser(userId, options = {}) {
       const result = await request(`/v1/users/${encodeURIComponent(userId)}`, {
         headers: createDelegationHeaders({
