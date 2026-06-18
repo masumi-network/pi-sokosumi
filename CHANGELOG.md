@@ -4,7 +4,7 @@
 
 - Added an optional `@masumi-network/pi-sokosumi/chat` helper for `/v1/chat` HTTP routes and standalone chat servers.
 - Added generic chat request normalization with agent/surface validation, identity extraction, payload sanitization, auth/rate-limit hooks, and callback-based dispatch.
-- Made the TypeScript compiler available during Git dependency prepare so agents can install the package directly from GitHub.
+- Included built `dist` output and moved the package build hook to publish time so agents can install the package directly from GitHub.
 
 ## 0.1.4
 

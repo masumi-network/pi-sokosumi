@@ -79,17 +79,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "pnpm typecheck && pnpm test",
-    "prepare": "tsc -p tsconfig.json",
     "test": "pnpm build && node --test dist/tests/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "prepack": "pnpm build"
+    "prepublishOnly": "pnpm build"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "^0.75.5"
-  },
-  "dependencies": {
-    "@types/node": "^22.15.30",
-    "typescript": "^5.8.3"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "^0.75.5",
