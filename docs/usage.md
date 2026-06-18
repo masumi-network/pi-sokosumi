@@ -140,3 +140,22 @@ const metadata = extractSokosumiIdentityMetadata(body, request.headers);
 ```
 
 Pass request headers when processing delegated Sokosumi chat or task routes.
+
+## Optional Chat Helper
+
+The package does not start a chat endpoint automatically. Agents that need one can opt in:
+
+```ts
+import { createPiAgentChatRouteHandler } from "@masumi-network/pi-sokosumi/chat";
+
+const chatRoute = createPiAgentChatRouteHandler({
+  defaultAgentId: "nori",
+  supportedAgentIds: ["nori"],
+  supportedSurfaces: ["chat"],
+  handleChat: async ({ request }) => dispatchAgentRequest(request)
+});
+
+if (await chatRoute(req, res)) return;
+```
+
+Use `startPiAgentChatServer` from the same module for a standalone `/v1/chat` server.

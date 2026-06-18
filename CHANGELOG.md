@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5
+
+- Added an optional `@masumi-network/pi-sokosumi/chat` helper for `/v1/chat` HTTP routes and standalone chat servers.
+- Added generic chat request normalization with agent/surface validation, identity extraction, payload sanitization, auth/rate-limit hooks, and callback-based dispatch.
+
 ## 0.1.4
 
 - Added `updateTask` to the HTTP Sokosumi client so the real client matches the shared client contract.

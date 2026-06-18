@@ -7,6 +7,7 @@ This package is agent-agnostic. It provides generic infrastructure only:
 - Pi extension registration for Sokosumi coworker tools.
 - Sokosumi HTTP coworker client.
 - Sokosumi task poller with claim, cancel, completion, stale input-required, and hook callbacks.
+- Optional `/v1/chat` HTTP helper for agents that expose a direct chat endpoint.
 - Identity extraction helpers for Sokosumi task, message, metadata, and delegated-header payloads.
 - Generic agent worker that wires the client, poller, identity extraction, and task-handler callback.
 - Masumi completion-payment client, hooks, pending-payment store interface, and settlement poller.
@@ -116,6 +117,42 @@ createSokosumiTaskPoller({
 ```
 
 The poller is deliberately callback-driven. It handles task-board mechanics; the consuming agent decides task-specific behavior.
+
+## Optional Chat Route
+
+Agents that need a direct chat endpoint can opt in to the helper. Agents that only run as
+Sokosumi workers do not need to import or start it.
+
+```ts
+import { createPiAgentChatRouteHandler } from "@masumi-network/pi-sokosumi/chat";
+
+const chatRoute = createPiAgentChatRouteHandler({
+  defaultAgentId: "nori",
+  supportedAgentIds: ["nori"],
+  supportedSurfaces: ["chat"],
+  authorize: ({ req }) => assertAuthorized(req),
+  rateLimit: ({ req }) => assertWithinRateLimit(req),
+  handleChat: async ({ request }) => dispatchAgentRequest(request)
+});
+
+if (await chatRoute(req, res)) return;
+```
+
+For a standalone chat-only process:
+
+```ts
+import { startPiAgentChatServer } from "@masumi-network/pi-sokosumi/chat";
+
+startPiAgentChatServer({
+  port: 3000,
+  defaultAgentId: "nori",
+  supportedAgentIds: ["nori"],
+  handleChat: async ({ request }) => ({
+    agentId: request.agentId,
+    reply: `Received: ${request.message}`
+  })
+});
+```
 
 ## Agent Worker
 

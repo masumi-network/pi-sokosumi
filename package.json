@@ -1,6 +1,6 @@
 {
   "name": "@masumi-network/pi-sokosumi",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": false,
   "type": "module",
   "packageManager": "pnpm@10.33.0",
@@ -53,6 +53,10 @@
     "./identity": {
       "types": "./dist/src/identity/resolveSokosumiIdentity.d.ts",
       "import": "./dist/src/identity/resolveSokosumiIdentity.js"
+    },
+    "./chat": {
+      "types": "./dist/src/chat/createPiAgentChatServer.d.ts",
+      "import": "./dist/src/chat/createPiAgentChatServer.js"
     },
     "./masumi": {
       "types": "./dist/src/masumi/index.d.ts",
