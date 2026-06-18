@@ -87,6 +87,10 @@
   "peerDependencies": {
     "@earendil-works/pi-ai": "^0.75.5"
   },
+  "dependencies": {
+    "@types/node": "^22.15.30",
+    "typescript": "^5.8.3"
+  },
   "devDependencies": {
     "@earendil-works/pi-ai": "^0.75.5",
     "@types/node": "^22.15.30",
