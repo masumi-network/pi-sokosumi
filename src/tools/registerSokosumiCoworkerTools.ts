@@ -1,6 +1,8 @@
 import { Type } from "@earendil-works/pi-ai";
 import { SOKOSUMI_TASK_EVENT_STATUSES } from "../client/types.js";
-import type { PiExtensionAPI, PiToolResult } from "../piTypes.js";
+import type { PiExtensionAPI } from "../piTypes.js";
+import { createJsonToolResult } from "./createJsonToolResult.js";
+import { createSokosumiCommentOnTaskTool } from "./sokosumiCommentOnTask.js";
 
 type SokosumiHttpClient = {
   getCurrentCoworker(): Promise<unknown>;
@@ -23,7 +25,7 @@ export function registerSokosumiCoworkerTools(pi: PiExtensionAPI, client: Sokosu
     description: "Get the authenticated Sokosumi coworker profile for this agent.",
     parameters: Type.Object({}),
     async execute() {
-      return toolResult(await client.getCurrentCoworker());
+      return createJsonToolResult(await client.getCurrentCoworker());
     }
   });
 
@@ -36,7 +38,7 @@ export function registerSokosumiCoworkerTools(pi: PiExtensionAPI, client: Sokosu
       cursor: Type.Optional(Type.String({ description: "Pagination cursor" }))
     }),
     async execute(_toolCallId, params) {
-      return toolResult(await client.listCoworkerEvents(params));
+      return createJsonToolResult(await client.listCoworkerEvents(params));
     }
   });
 
@@ -48,9 +50,11 @@ export function registerSokosumiCoworkerTools(pi: PiExtensionAPI, client: Sokosu
       taskId: Type.String({ description: "Sokosumi task id" })
     }),
     async execute(_toolCallId, params) {
-      return toolResult(await client.getTask(params.taskId));
+      return createJsonToolResult(await client.getTask(params.taskId));
     }
   });
+
+  pi.registerTool(createSokosumiCommentOnTaskTool(client));
 
   pi.registerTool({
     name: "sokosumi_create_task_event",
@@ -81,7 +85,7 @@ export function registerSokosumiCoworkerTools(pi: PiExtensionAPI, client: Sokosu
     }),
     async execute(_toolCallId, params) {
       const { taskId, ...body } = params;
-      return toolResult(
+      return createJsonToolResult(
         await client.createTaskEvent(taskId, {
           origin: "SOKOSUMI",
           ...body
@@ -102,7 +106,7 @@ export function registerSokosumiCoworkerTools(pi: PiExtensionAPI, client: Sokosu
       referenceId: Type.Optional(Type.String({ description: "Optional task, event, or job id for audit linkage" }))
     }),
     async execute(_toolCallId, params) {
-      return toolResult(
+      return createJsonToolResult(
         await client.createCoworkerUsage({
           userId: params.userId,
           organizationId: params.organizationId || null,
@@ -113,16 +117,4 @@ export function registerSokosumiCoworkerTools(pi: PiExtensionAPI, client: Sokosu
       );
     }
   });
-}
-
-function toolResult(details: unknown): PiToolResult {
-  return {
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(details, null, 2)
-      }
-    ],
-    details
-  };
 }

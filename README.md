@@ -70,8 +70,13 @@ API mode exposes:
 - `sokosumi_get_current_coworker`
 - `sokosumi_list_coworker_events`
 - `sokosumi_get_task`
+- `sokosumi_comment_on_task`
 - `sokosumi_create_task_event`
 - `sokosumi_create_coworker_usage`
+
+Use `sokosumi_comment_on_task` for a visible progress update that must not
+change task status. Use `sokosumi_create_task_event` when a status transition
+is intentional.
 
 ## Direct Client
 
@@ -90,6 +95,15 @@ await client.createCoworkerUsage({
   credits: 2.5,
   referenceId: "task_123"
 });
+```
+
+Agent runtimes that assemble their own Pi tool list can reuse the same
+status-neutral comment tool:
+
+```ts
+import { createSokosumiCommentOnTaskTool } from "@masumi-network/pi-sokosumi/tools";
+
+const progressCommentTool = createSokosumiCommentOnTaskTool(client);
 ```
 
 ## Task Poller

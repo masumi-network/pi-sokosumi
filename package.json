@@ -54,6 +54,10 @@
       "types": "./dist/src/identity/resolveSokosumiIdentity.d.ts",
       "import": "./dist/src/identity/resolveSokosumiIdentity.js"
     },
+    "./tools": {
+      "types": "./dist/src/tools/index.d.ts",
+      "import": "./dist/src/tools/index.js"
+    },
     "./chat": {
       "types": "./dist/src/chat/createPiAgentChatServer.d.ts",
       "import": "./dist/src/chat/createPiAgentChatServer.js"
