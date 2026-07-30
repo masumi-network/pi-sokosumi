@@ -1,2 +1,2 @@
-export { SOKOSUMI_COMMENT_ON_TASK_TOOL_NAME, commentOnSokosumiTask, createSokosumiCommentOnTaskTool } from "./sokosumiCommentOnTask.js";
+export { SOKOSUMI_COMMENT_ON_TASK_TOOL_DESCRIPTION, SOKOSUMI_COMMENT_ON_TASK_TOOL_LABEL, SOKOSUMI_COMMENT_ON_TASK_TOOL_NAME, SOKOSUMI_COMMENT_ON_TASK_TOOL_PARAMETERS, commentOnSokosumiTask, createSokosumiCommentOnTaskTool } from "./sokosumiCommentOnTask.js";
 //# sourceMappingURL=index.js.map

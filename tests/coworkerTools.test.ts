@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   SOKOSUMI_COMMENT_ON_TASK_TOOL_NAME,
+  SOKOSUMI_COMMENT_ON_TASK_TOOL_PARAMETERS,
   commentOnSokosumiTask,
   createSokosumiCommentOnTaskTool
 } from "../src/tools/sokosumiCommentOnTask.js";
@@ -28,6 +29,7 @@ test("status-neutral comment tool posts a visible Sokosumi task comment", async 
   });
 
   assert.equal(tool.name, SOKOSUMI_COMMENT_ON_TASK_TOOL_NAME);
+  assert.equal(tool.parameters, SOKOSUMI_COMMENT_ON_TASK_TOOL_PARAMETERS);
   assert.deepEqual(tool.parameters.required, ["taskId", "comment"]);
   assert.equal("status" in tool.parameters.properties, false);
   assert.deepEqual(requests, [
