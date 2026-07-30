@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added a reusable, status-neutral `sokosumi_comment_on_task` tool for
+  user-visible agent progress comments.
+
 ## 0.1.5
 
 - Added an optional `@masumi-network/pi-sokosumi/chat` helper for `/v1/chat` HTTP routes and standalone chat servers.

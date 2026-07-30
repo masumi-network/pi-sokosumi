@@ -1,5 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
 import { SOKOSUMI_TASK_EVENT_STATUSES } from "../client/types.js";
+import { createSokosumiCommentOnTaskTool } from "./sokosumiCommentOnTask.js";
 export function registerSokosumiCoworkerTools(pi, client) {
     pi.registerTool({
         name: "sokosumi_get_current_coworker",
@@ -33,6 +34,7 @@ export function registerSokosumiCoworkerTools(pi, client) {
             return toolResult(await client.getTask(params.taskId));
         }
     });
+    pi.registerTool(createSokosumiCommentOnTaskTool(client));
     pi.registerTool({
         name: "sokosumi_create_task_event",
         label: "Create Sokosumi Task Event",

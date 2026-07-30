@@ -41,6 +41,16 @@ When `SOKOSUMI_COWORKER_API_KEY` is set, the extension uses the real coworker AP
 
 The client validates required inputs and never accepts caller-supplied `Authorization` headers.
 
+### Tools
+
+The shared tools module exposes `sokosumi_comment_on_task` as a narrow,
+status-neutral interface for user-visible progress. It accepts only a task id
+and comment, then creates a comment-only Sokosumi event with origin
+`SOKOSUMI`. Agent-specific policy decides when a progress comment is useful.
+
+The broader `sokosumi_create_task_event` tool remains responsible for
+intentional task-event status transitions.
+
 ### Poller
 
 `src/poller/createSokosumiTaskPoller.ts` scans assigned coworker events and handles task-board mechanics:

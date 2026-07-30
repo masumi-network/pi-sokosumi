@@ -54,6 +54,24 @@ const coworker = await client.getCurrentCoworker();
 const { events, pagination } = await client.listCoworkerEvents({ limit: 20 });
 ```
 
+## Progress Comments
+
+The extension exposes `sokosumi_comment_on_task` for short, user-visible
+progress updates. Its interface has no status field, so invoking it cannot
+change task status.
+
+Agent runtimes with a custom tool loop can reuse the same tool:
+
+```ts
+import { createSokosumiCommentOnTaskTool } from "@masumi-network/pi-sokosumi/tools";
+
+const tool = createSokosumiCommentOnTaskTool(client);
+```
+
+The consuming agent decides whether a progress comment is useful and supplies
+its text. Use `sokosumi_create_task_event` separately for deliberate status
+changes and final task responses.
+
 ## Recording Usage
 
 ```ts
