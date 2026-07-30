@@ -8,6 +8,8 @@ import {
   createSokosumiCommentOnTaskTool
 } from "../src/tools/sokosumiCommentOnTask.js";
 import { registerSokosumiCoworkerTools } from "../src/tools/registerSokosumiCoworkerTools.js";
+import { registerSokosumiTools } from "../src/tools/registerSokosumiTools.js";
+import { createMockSokosumiClient } from "../src/client/mockSokosumiClient.js";
 
 test("status-neutral comment tool posts a visible Sokosumi task comment", async () => {
   const requests = [];
@@ -95,4 +97,33 @@ test("coworker tool registration exposes the status-neutral comment tool to ever
   const commentTool = tools.find((tool) => tool.name === SOKOSUMI_COMMENT_ON_TASK_TOOL_NAME);
   assert.ok(commentTool);
   assert.equal("status" in commentTool.parameters.properties, false);
+});
+
+test("mock and real coworker registrars expose the same progress-comment interface", async () => {
+  const client = createMockSokosumiClient();
+  const task = await client.createTask({ title: "Mock progress" });
+  const tools = [];
+  registerSokosumiTools(
+    {
+      registerTool(tool) {
+        tools.push(tool);
+      }
+    },
+    client
+  );
+
+  const commentTool = tools.find((tool) => tool.name === SOKOSUMI_COMMENT_ON_TASK_TOOL_NAME);
+  assert.ok(commentTool);
+  assert.equal(commentTool.parameters, SOKOSUMI_COMMENT_ON_TASK_TOOL_PARAMETERS);
+  assert.equal("body" in commentTool.parameters.properties, false);
+
+  await commentTool.execute("mock-progress-1", {
+    taskId: task.id,
+    comment: "Mock progress is visible."
+  });
+
+  const updated = await client.getTask(task.id);
+  assert.equal(updated.comments.length, 1);
+  assert.equal(updated.comments[0].body, "Mock progress is visible.");
+  assert.equal(updated.status, "draft");
 });

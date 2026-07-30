@@ -1,5 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
-import type { PiToolDefinition, PiToolResult } from "../piTypes.js";
+import type { PiToolDefinition } from "../piTypes.js";
+import { createJsonToolResult } from "./createJsonToolResult.js";
 
 export const SOKOSUMI_COMMENT_ON_TASK_TOOL_NAME = "sokosumi_comment_on_task";
 export const SOKOSUMI_COMMENT_ON_TASK_TOOL_LABEL = "Comment On Sokosumi Task";
@@ -41,7 +42,7 @@ export function createSokosumiCommentOnTaskTool(
     description: SOKOSUMI_COMMENT_ON_TASK_TOOL_DESCRIPTION,
     parameters: SOKOSUMI_COMMENT_ON_TASK_TOOL_PARAMETERS,
     async execute(_toolCallId, params) {
-      return toolResult(await commentOnSokosumiTask(client, params));
+      return createJsonToolResult(await commentOnSokosumiTask(client, params));
     }
   };
 }
@@ -52,16 +53,4 @@ function normalizeRequiredText(value: unknown, label: string) {
     throw new Error(`Sokosumi ${label} is required.`);
   }
   return normalized;
-}
-
-function toolResult(details: unknown): PiToolResult {
-  return {
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(details, null, 2)
-      }
-    ],
-    details
-  };
 }

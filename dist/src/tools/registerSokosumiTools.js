@@ -1,4 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
+import { createJsonToolResult } from "./createJsonToolResult.js";
+import { createSokosumiCommentOnTaskTool } from "./sokosumiCommentOnTask.js";
 export function registerSokosumiTools(pi, client) {
     pi.registerTool({
         name: "sokosumi_create_task",
@@ -17,7 +19,7 @@ export function registerSokosumiTools(pi, client) {
         }),
         async execute(_toolCallId, params) {
             const task = await client.createTask(params);
-            return toolResult(task);
+            return createJsonToolResult(task);
         }
     });
     pi.registerTool({
@@ -38,22 +40,17 @@ export function registerSokosumiTools(pi, client) {
         }),
         async execute(_toolCallId, params) {
             const task = await client.updateTask(params);
-            return toolResult(task);
+            return createJsonToolResult(task);
         }
     });
-    pi.registerTool({
-        name: "sokosumi_comment_on_task",
-        label: "Comment On Sokosumi Task",
-        description: "Add a comment to a Sokosumi task. Currently uses mock in-memory storage.",
-        parameters: Type.Object({
-            taskId: Type.String({ description: "Task id" }),
-            body: Type.String({ description: "Comment body" })
-        }),
-        async execute(_toolCallId, params) {
-            const task = await client.commentOnTask(params);
-            return toolResult(task);
+    pi.registerTool(createSokosumiCommentOnTaskTool({
+        async createTaskEvent(taskId, body) {
+            return client.commentOnTask({
+                taskId,
+                body: String(body.comment || "")
+            });
         }
-    });
+    }));
     pi.registerTool({
         name: "sokosumi_get_task",
         label: "Get Sokosumi Task",
@@ -63,19 +60,8 @@ export function registerSokosumiTools(pi, client) {
         }),
         async execute(_toolCallId, params) {
             const task = await client.getTask(params.taskId);
-            return toolResult(task || { error: "not_found", taskId: params.taskId });
+            return createJsonToolResult(task || { error: "not_found", taskId: params.taskId });
         }
     });
-}
-function toolResult(details) {
-    return {
-        content: [
-            {
-                type: "text",
-                text: JSON.stringify(details, null, 2)
-            }
-        ],
-        details
-    };
 }
 //# sourceMappingURL=registerSokosumiTools.js.map

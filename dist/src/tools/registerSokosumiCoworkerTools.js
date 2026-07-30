@@ -1,5 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
 import { SOKOSUMI_TASK_EVENT_STATUSES } from "../client/types.js";
+import { createJsonToolResult } from "./createJsonToolResult.js";
 import { createSokosumiCommentOnTaskTool } from "./sokosumiCommentOnTask.js";
 export function registerSokosumiCoworkerTools(pi, client) {
     pi.registerTool({
@@ -8,7 +9,7 @@ export function registerSokosumiCoworkerTools(pi, client) {
         description: "Get the authenticated Sokosumi coworker profile for this agent.",
         parameters: Type.Object({}),
         async execute() {
-            return toolResult(await client.getCurrentCoworker());
+            return createJsonToolResult(await client.getCurrentCoworker());
         }
     });
     pi.registerTool({
@@ -20,7 +21,7 @@ export function registerSokosumiCoworkerTools(pi, client) {
             cursor: Type.Optional(Type.String({ description: "Pagination cursor" }))
         }),
         async execute(_toolCallId, params) {
-            return toolResult(await client.listCoworkerEvents(params));
+            return createJsonToolResult(await client.listCoworkerEvents(params));
         }
     });
     pi.registerTool({
@@ -31,7 +32,7 @@ export function registerSokosumiCoworkerTools(pi, client) {
             taskId: Type.String({ description: "Sokosumi task id" })
         }),
         async execute(_toolCallId, params) {
-            return toolResult(await client.getTask(params.taskId));
+            return createJsonToolResult(await client.getTask(params.taskId));
         }
     });
     pi.registerTool(createSokosumiCommentOnTaskTool(client));
@@ -62,7 +63,7 @@ export function registerSokosumiCoworkerTools(pi, client) {
         }),
         async execute(_toolCallId, params) {
             const { taskId, ...body } = params;
-            return toolResult(await client.createTaskEvent(taskId, {
+            return createJsonToolResult(await client.createTaskEvent(taskId, {
                 origin: "SOKOSUMI",
                 ...body
             }));
@@ -80,7 +81,7 @@ export function registerSokosumiCoworkerTools(pi, client) {
             referenceId: Type.Optional(Type.String({ description: "Optional task, event, or job id for audit linkage" }))
         }),
         async execute(_toolCallId, params) {
-            return toolResult(await client.createCoworkerUsage({
+            return createJsonToolResult(await client.createCoworkerUsage({
                 userId: params.userId,
                 organizationId: params.organizationId || null,
                 idempotencyKey: params.idempotencyKey,
@@ -89,16 +90,5 @@ export function registerSokosumiCoworkerTools(pi, client) {
             }));
         }
     });
-}
-function toolResult(details) {
-    return {
-        content: [
-            {
-                type: "text",
-                text: JSON.stringify(details, null, 2)
-            }
-        ],
-        details
-    };
 }
 //# sourceMappingURL=registerSokosumiCoworkerTools.js.map
