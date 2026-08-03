@@ -17,10 +17,7 @@ test("HTTP Sokosumi client updates tasks with PATCH", async () => {
       });
       return new Response(
         JSON.stringify({
-          data: {
-            id: "task-1",
-            status: "in_progress"
-          }
+          data: sokosumiTaskResponse({ id: "task-1", status: "RUNNING" })
         }),
         { status: 200 }
       );
@@ -33,7 +30,7 @@ test("HTTP Sokosumi client updates tasks with PATCH", async () => {
     title: "Updated title"
   });
 
-  assert.equal(task.status, "in_progress");
+  assert.equal(task.status, "RUNNING");
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, "https://sokosumi.example.test/v1/tasks/task-1");
   assert.equal(requests[0].method, "PATCH");
@@ -51,7 +48,20 @@ test("HTTP Sokosumi client normalizes supported coworker usage aliases", async (
     apiKey: "test-key",
     fetchImpl: async (url: string, options: any = {}) => {
       requests.push({ url, body: JSON.parse(options.body) });
-      return new Response(JSON.stringify({ data: { id: "usage-1" } }), { status: 200 });
+      return new Response(JSON.stringify({
+        data: {
+          id: "usage-1",
+          createdAt: "2026-08-03T10:00:00.000Z",
+          updatedAt: "2026-08-03T10:00:00.000Z",
+          idempotencyKey: "usage-1",
+          referenceId: "task-1",
+          coworkerId: "coworker-1",
+          userId: "user-1",
+          organizationId: "org-1",
+          credits: 2.5,
+          transactionId: "transaction-1"
+        }
+      }), { status: 200 });
     }
   });
 
@@ -87,3 +97,99 @@ test("HTTP Sokosumi client rejects malformed external task data", async () => {
     (error: any) => error?.name === "SokosumiRequestError" && error?.code === "invalid_response"
   );
 });
+
+test("HTTP Sokosumi client accepts current task statuses and nullable response fields", async () => {
+  const task = sokosumiTaskResponse({
+    status: "QUEUED",
+    description: null,
+    metadata: JSON.stringify({ schedule: "daily" }),
+    events: [sokosumiTaskEventResponse({ status: "APPROVAL_REQUIRED", comment: null })]
+  });
+  const client = createHttpSokosumiClient({
+    apiUrl: "https://sokosumi.example.test",
+    apiKey: "test-key",
+    fetchImpl: async () => new Response(JSON.stringify({ data: task }), { status: 200 })
+  });
+
+  const result = await client.getTask("task-1");
+
+  assert.equal(result?.status, "QUEUED");
+  assert.equal(result?.description, null);
+  assert.equal(result?.events[0].status, "APPROVAL_REQUIRED");
+  assert.equal(result?.events[0].comment, null);
+});
+
+test("HTTP Sokosumi client rejects incomplete task objects", async () => {
+  const client = createHttpSokosumiClient({
+    apiUrl: "https://sokosumi.example.test",
+    apiKey: "test-key",
+    fetchImpl: async () => new Response(JSON.stringify({ data: {} }), { status: 200 })
+  });
+
+  await assert.rejects(
+    client.getTask("task-1"),
+    (error: any) => error?.code === "invalid_response" && /\.id must be a string/.test(error.message)
+  );
+});
+
+function sokosumiTaskEventResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "event-1",
+    taskId: "task-1",
+    createdAt: "2026-08-03T10:00:00.000Z",
+    updatedAt: "2026-08-03T10:00:00.000Z",
+    actor: null,
+    userId: null,
+    user: null,
+    coworkerId: null,
+    coworker: null,
+    orchestratorId: null,
+    orchestrator: null,
+    transactionId: null,
+    credits: null,
+    comment: "Ready",
+    authenticationUrl: null,
+    channel: "SOKOSUMI",
+    origin: "SOKOSUMI",
+    status: "READY",
+    ...overrides
+  };
+}
+
+function sokosumiTaskResponse(overrides: Record<string, unknown> = {}) {
+  const user = { id: "user-1", name: "Ada", image: null };
+  return {
+    id: "task-1",
+    createdAt: "2026-08-03T10:00:00.000Z",
+    updatedAt: "2026-08-03T10:00:00.000Z",
+    ownerId: "user-1",
+    owner: user,
+    userId: "user-1",
+    user,
+    organizationId: null,
+    organization: null,
+    projectId: null,
+    assigneeId: null,
+    assignee: null,
+    coworkerId: null,
+    coworker: null,
+    creator: { type: "user", id: "user-1", user },
+    orchestratorId: null,
+    orchestrator: null,
+    name: "Task",
+    description: null,
+    status: "READY",
+    grantResumeStatus: null,
+    pendingVendorGrantId: null,
+    metadata: null,
+    nextRunAt: null,
+    credits: 1,
+    events: [],
+    jobs: [],
+    workspace: {},
+    share: null,
+    links: [],
+    files: [],
+    ...overrides
+  };
+}

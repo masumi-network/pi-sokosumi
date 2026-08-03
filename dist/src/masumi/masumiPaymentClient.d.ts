@@ -173,7 +173,7 @@ export type MasumiSubmitResultInput = MasumiSubmitResultHash & {
     network?: MasumiNetworkInput;
     blockchainIdentifier: string;
 };
-export type MasumiSubmitResultResponse = Record<string, unknown>;
+export type MasumiSubmitResultResponse = MasumiPaymentDetails;
 export type MasumiFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Pick<Response, "ok" | "status" | "text">>;
 export type MasumiPaymentClientOptions = {
     apiUrl?: string;

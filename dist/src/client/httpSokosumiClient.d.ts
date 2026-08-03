@@ -50,4 +50,4 @@ export type SokosumiHttpClient = {
     createCoworkerUsage(input: CreateCoworkerUsageInput | HttpCreateCoworkerUsageInput): Promise<SokosumiCoworkerUsage>;
 };
 export declare function createHttpSokosumiClient({ apiUrl, apiKey, fetchImpl, timeoutMs }: HttpSokosumiClientOptions): SokosumiHttpClient;
-export type { CreateCoworkerUsageInput, ListSokosumiCoworkerEventsInput, SokosumiCoworker, SokosumiCoworkerEventPage, SokosumiCoworkerUsage, SokosumiDelegationOptions, SokosumiPagination, SokosumiTaskEvent, SokosumiTaskEventInput, SokosumiTaskSnapshot, SokosumiUser } from "./types.js";
+export type { CreateCoworkerUsageInput, ListSokosumiCoworkerEventsInput, SokosumiCoworker, SokosumiCoworkerEventPage, SokosumiCoworkerSummary, SokosumiCoworkerUsage, SokosumiDelegationOptions, SokosumiEventChannel, SokosumiEventOrigin, SokosumiNonAuthenticationTaskEventStatus, SokosumiOrchestratorSummary, SokosumiPagination, SokosumiTaskCreator, SokosumiTaskEvent, SokosumiTaskEventActor, SokosumiTaskEventInput, SokosumiTaskLink, SokosumiTaskLinkRelation, SokosumiTaskSnapshot, SokosumiUser, SokosumiUserSummary } from "./types.js";

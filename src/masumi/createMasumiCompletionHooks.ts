@@ -18,8 +18,8 @@ import {
   normalizeMasumiRawUnits,
   sha256Hex,
   type MasumiAmountInput,
-  type MasumiCreatePaymentResult,
-  type MasumiPaymentClient,
+  type MasumiCreatePaymentInput,
+  type SokosumiMasumiPaymentPayloadInput,
   type SokosumiMasumiPaymentPayload
 } from "./masumiPaymentClient.js";
 import type {
@@ -52,15 +52,22 @@ export type MasumiCompletionBeforeHookResult<
   TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput
 > = TTaskEvent | MasumiCompletionTaskEvent<TTaskEvent>;
 
+export type MasumiCompletionPaymentClient<
+  TResult extends SokosumiMasumiPaymentPayloadInput = SokosumiMasumiPaymentPayloadInput
+> = {
+  createPayment(input: MasumiCreatePaymentInput): Awaitable<TResult>;
+};
+
 export type MasumiCompletionHooksOptions<
   TEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
   TTask extends SokosumiTaskSnapshot<TEvent> = SokosumiTaskSnapshot<TEvent>,
   TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput,
   TCreatedTaskEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
-  TRecord extends MasumiPendingPaymentRecord = MasumiPendingPaymentRecord
+  TRecord extends MasumiPendingPaymentRecord = MasumiPendingPaymentRecord,
+  TPaymentResult extends SokosumiMasumiPaymentPayloadInput = SokosumiMasumiPaymentPayloadInput
 > = {
   enabled?: boolean;
-  masumiClient?: Pick<MasumiPaymentClient, "createPayment">;
+  masumiClient?: MasumiCompletionPaymentClient<TPaymentResult>;
   store?: Pick<MasumiPaymentStore<TRecord>, "recordPendingMasumiPayment">;
   calculateCostCents?: (
     input: SokosumiBeforeTaskEventCreatedInput<TEvent, TTask, TTaskEvent>
@@ -99,7 +106,8 @@ export function createMasumiCompletionHooks<
   TTask extends SokosumiTaskSnapshot<TEvent> = SokosumiTaskSnapshot<TEvent>,
   TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput,
   TCreatedTaskEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
-  TRecord extends MasumiPendingPaymentRecord = MasumiPendingPaymentRecord
+  TRecord extends MasumiPendingPaymentRecord = MasumiPendingPaymentRecord,
+  TPaymentResult extends SokosumiMasumiPaymentPayloadInput = SokosumiMasumiPaymentPayloadInput
 >({
   enabled = true,
   masumiClient,
@@ -107,7 +115,14 @@ export function createMasumiCompletionHooks<
   calculateCostCents,
   createPaymentMetadata,
   logger = console
-}: MasumiCompletionHooksOptions<TEvent, TTask, TTaskEvent, TCreatedTaskEvent, TRecord> = {}): MasumiCompletionHooks<
+}: MasumiCompletionHooksOptions<
+  TEvent,
+  TTask,
+  TTaskEvent,
+  TCreatedTaskEvent,
+  TRecord,
+  TPaymentResult
+> = {}): MasumiCompletionHooks<
   TEvent,
   TTask,
   TTaskEvent,

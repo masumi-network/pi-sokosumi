@@ -150,6 +150,52 @@ test("Masumi payment client rejects incomplete external payment objects", async 
   );
 });
 
+test("Masumi submit-result narrows the payment response", async () => {
+  const client = createMasumiPaymentClient({
+    apiUrl: "https://masumi.example.test/api/v1",
+    apiToken: "payment-token",
+    agentIdentifier: "agent1",
+    async fetchImpl() {
+      return jsonResponse({
+        status: "success",
+        data: masumiPaymentResponse({
+          id: "payment-submitted",
+          blockchainIdentifier: "blockchain-submitted",
+          resultHash: "b".repeat(64)
+        })
+      });
+    }
+  });
+
+  const result = await client.submitResult({
+    blockchainIdentifier: "blockchain-submitted",
+    submitResultHash: "b".repeat(64)
+  });
+
+  assert.equal(result.id, "payment-submitted");
+  assert.equal(result.resultHash, "b".repeat(64));
+  assert.equal(result.PaymentSource.network, "Preprod");
+});
+
+test("Masumi submit-result rejects incomplete external payment objects", async () => {
+  const client = createMasumiPaymentClient({
+    apiUrl: "https://masumi.example.test/api/v1",
+    apiToken: "payment-token",
+    agentIdentifier: "agent1",
+    async fetchImpl() {
+      return jsonResponse({ status: "success", data: {} });
+    }
+  });
+
+  await assert.rejects(
+    () => client.submitResult({
+      blockchainIdentifier: "blockchain-invalid",
+      submitResultHash: "c".repeat(64)
+    }),
+    (error) => error?.code === "invalid_response" && /\.id must be a string/.test(error.message)
+  );
+});
+
 test("Masumi completion hooks attach payment data and persist exact payload hash after Sokosumi accepts it", async () => {
   const store = createMemoryMasumiPaymentStore();
   const hooks = createMasumiCompletionHooks({

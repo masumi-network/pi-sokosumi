@@ -5,7 +5,7 @@ import {
   type CreateCoworkerUsageInput,
   type ListSokosumiCoworkerEventsInput,
   type SokosumiEventOrigin,
-  type SokosumiTaskEventStatus
+  type SokosumiNonAuthenticationTaskEventStatus
 } from "../client/types.js";
 import type { PiToolRegistrationAPI } from "../piTypes.js";
 import { createJsonToolResult } from "./createJsonToolResult.js";
@@ -15,13 +15,22 @@ export type SokosumiGetTaskToolInput = {
   taskId: string;
 };
 
-export type SokosumiCreateTaskEventToolInput = {
+type SokosumiCreateTaskEventToolInputBase = {
   taskId: string;
-  status: SokosumiTaskEventStatus;
   comment?: string;
-  origin?: Exclude<SokosumiEventOrigin, "USER">;
+  origin?: SokosumiEventOrigin;
   credits?: number;
 };
+
+export type SokosumiCreateTaskEventToolInput =
+  | (SokosumiCreateTaskEventToolInputBase & {
+      status: "AUTHENTICATION_REQUIRED";
+      authenticationUrl: string;
+    })
+  | (SokosumiCreateTaskEventToolInputBase & {
+      status: SokosumiNonAuthenticationTaskEventStatus;
+      authenticationUrl?: never;
+    });
 
 export type SokosumiCreateCoworkerUsageToolInput = CreateCoworkerUsageInput;
 
@@ -76,6 +85,7 @@ export function registerSokosumiCoworkerTools(pi: PiToolRegistrationAPI, client:
       taskId: Type.String({ description: "Sokosumi task id" }),
       status: Type.Union(SOKOSUMI_TASK_EVENT_STATUSES.map((status) => Type.Literal(status))),
       comment: Type.Optional(Type.String({ description: "Visible task-board comment" })),
+      authenticationUrl: Type.Optional(Type.String({ description: "HTTPS authorization URL for AUTHENTICATION_REQUIRED events" })),
       origin: Type.Optional(
         Type.Union([
           Type.Literal("SLACK"),

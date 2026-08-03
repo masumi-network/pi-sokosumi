@@ -15,6 +15,7 @@ import {
 import {
   SOKOSUMI_CANCELED_TASK_EVENT_STATUSES,
   SOKOSUMI_COWORKER_PROGRESS_STATUSES,
+  SOKOSUMI_EVENT_CHANNELS,
   SOKOSUMI_EVENT_ORIGINS,
   SOKOSUMI_TASK_EVENT_DECISION_STATUSES,
   SOKOSUMI_TASK_EVENT_STATUS_DECISION_PROMPT,
@@ -35,6 +36,8 @@ import {
   type SokosumiCoworker,
   type SokosumiCoworkerEventPage,
   type SokosumiCoworkerUsage,
+  type SokosumiDelegationOptions,
+  type SokosumiEventChannel,
   type SokosumiEventOrigin,
   type SokosumiPagination,
   type SokosumiTask,
@@ -129,12 +132,16 @@ import {
   sha256Hex,
   usdToMasumiCostCents,
   type MasumiCompletionHooksOptions,
+  type MasumiCompletionPaymentClient,
   type MasumiNetwork,
   type MasumiPayment,
   type MasumiPaymentClientOptions,
+  type MasumiPaymentDetails,
   type MasumiPaymentPollerOptions,
   type MasumiPaymentStore,
   type MasumiPendingPaymentRecord,
+  type MasumiSubmitResultResponse,
+  type SokosumiMasumiPaymentPayload,
   type RecordPendingMasumiPaymentInput
 } from "@masumi-network/pi-sokosumi/masumi";
 import {
@@ -187,6 +194,24 @@ const httpOptions: HttpSokosumiClientOptions = {
   timeoutMs: 5000
 };
 const httpClient: SokosumiHttpClient = createHttpSokosumiClient(httpOptions);
+const eventPaymentPayload: SokosumiMasumiPaymentPayload = {
+  id: "payment-1",
+  blockchainIdentifier: "blockchain-1",
+  agentIdentifier: "agent-1",
+  sellerVkey: "seller-vkey",
+  payByTime: "1775737949000",
+  submitResultTime: "1775681853000",
+  unlockTime: "1775763149000",
+  externalDisputeUnlockTime: "1775784749000",
+  inputHash: "a".repeat(64),
+  identifierFromPurchaser: "0011223344556677",
+  Amounts: [{ amount: "30000", unit: "unit" }],
+  PaymentSource: {
+    network: "Preprod",
+    smartContractAddress: "addr_test_contract",
+    policyId: "policy"
+  }
+};
 void httpClient.getCurrentCoworker();
 void httpClient.listCoworkerEvents({ limit: 50, cursor: "next" });
 void httpClient.getTask("task-1");
@@ -203,9 +228,18 @@ void httpClient.createTaskEvent("task-1", {
   status: "COMPLETED",
   origin: "SOKOSUMI",
   comment: "Done",
-  credits: 2.5,
   metadata: { source: "type-test" },
-  masumiPayment: { id: "payment-1" }
+  masumiPayment: eventPaymentPayload
+});
+void httpClient.createTaskEvent("task-1", {
+  status: "AUTHENTICATION_REQUIRED",
+  channel: "SOKOSUMI",
+  authenticationUrl: "https://example.test/authorize"
+});
+void httpClient.createTaskEvent("task-1", {
+  status: "RUNNING",
+  channel: "SOKOSUMI",
+  credits: 2.5
 });
 void httpClient.createCoworkerUsage({
   userId: "user-1",
@@ -228,15 +262,60 @@ const requestError: SokosumiRequestError = new SokosumiRequestError("bad respons
 void requestError;
 
 const eventStatus: SokosumiTaskEventStatus = SOKOSUMI_TASK_EVENT_STATUS.READY;
+const eventChannel: SokosumiEventChannel = SOKOSUMI_EVENT_CHANNELS[0];
 const eventOrigin: SokosumiEventOrigin = SOKOSUMI_EVENT_ORIGINS[0];
 const acceptsEventStatus = (value: SokosumiTaskEventStatus) => value;
 const acceptsEventOrigin = (value: SokosumiEventOrigin) => value;
 void acceptsEventStatus(eventStatus);
 void acceptsEventOrigin(eventOrigin);
-const eventInput: SokosumiTaskEventInput = { status: eventStatus, origin: eventOrigin };
-const eventRecord: SokosumiTaskEvent = { id: "event-1", taskId: "task-1", status: "READY" };
-const taskRecord: SokosumiTaskSnapshot = { id: "task-1", status: "READY", events: [eventRecord] };
+const eventInput: SokosumiTaskEventInput = { status: "READY", origin: eventOrigin };
+const userSummary = { id: "user-1", name: "Ada", image: null };
+const eventRecord: SokosumiTaskEvent = {
+  id: "event-1",
+  taskId: "task-1",
+  createdAt: "2026-08-03T10:00:00.000Z",
+  updatedAt: "2026-08-03T10:00:00.000Z",
+  actor: null,
+  channel: "SOKOSUMI",
+  origin: "SOKOSUMI",
+  status: "READY",
+  comment: null
+};
+const taskRecord: SokosumiTaskSnapshot = {
+  id: "task-1",
+  createdAt: "2026-08-03T10:00:00.000Z",
+  updatedAt: "2026-08-03T10:00:00.000Z",
+  ownerId: "user-1",
+  owner: userSummary,
+  userId: "user-1",
+  user: userSummary,
+  organizationId: null,
+  organization: null,
+  projectId: null,
+  assigneeId: null,
+  assignee: null,
+  coworkerId: null,
+  coworker: null,
+  creator: { type: "user", id: "user-1", user: userSummary },
+  orchestratorId: null,
+  orchestrator: null,
+  name: "Task",
+  description: null,
+  status: "READY",
+  grantResumeStatus: null,
+  pendingVendorGrantId: null,
+  metadata: null,
+  nextRunAt: null,
+  credits: 1,
+  events: [eventRecord],
+  jobs: [],
+  workspace: {},
+  share: null,
+  links: [],
+  files: []
+};
 void eventInput;
+void eventChannel;
 void taskRecord;
 void SOKOSUMI_CANCELED_TASK_EVENT_STATUSES;
 void SOKOSUMI_COWORKER_PROGRESS_STATUSES;
@@ -270,6 +349,59 @@ void domainTypes;
 // @ts-expect-error creation statuses exclude legacy response-only aliases
 const invalidEventInput: SokosumiTaskEventInput = { status: "DONE" };
 void invalidEventInput;
+// @ts-expect-error current Sokosumi task-event inputs do not support CANCEL_REQUESTED
+const invalidCancelRequestedEventInput: SokosumiTaskEventInput = { status: "CANCEL_REQUESTED" };
+void invalidCancelRequestedEventInput;
+// @ts-expect-error authentication events require an authorization URL
+const missingAuthenticationUrl: SokosumiTaskEventInput = { status: "AUTHENTICATION_REQUIRED" };
+void missingAuthenticationUrl;
+// @ts-expect-error authorization URLs are exclusive to authentication events
+const unexpectedAuthenticationUrl: SokosumiTaskEventInput = {
+  status: "RUNNING",
+  authenticationUrl: "https://example.test/authorize"
+};
+void unexpectedAuthenticationUrl;
+// @ts-expect-error channel and deprecated origin cannot both be sent
+const conflictingEventChannel: SokosumiTaskEventInput = {
+  status: "RUNNING",
+  channel: "CHAT",
+  origin: "SOKOSUMI"
+};
+void conflictingEventChannel;
+// @ts-expect-error Masumi-backed events must omit direct credits
+const conflictingEventBilling: SokosumiTaskEventInput = {
+  status: "COMPLETED",
+  credits: 1,
+  masumiPayment: eventPaymentPayload
+};
+void conflictingEventBilling;
+const incompleteEventPayment: SokosumiTaskEventInput = {
+  status: "COMPLETED",
+  // @ts-expect-error Masumi event payloads must include the complete exported wire shape
+  masumiPayment: { id: "payment-incomplete" }
+};
+void incompleteEventPayment;
+// @ts-expect-error at least one event action is required
+const emptyEventInput: SokosumiTaskEventInput = {};
+void emptyEventInput;
+
+declare const generalClient: SokosumiClient;
+const delegationOptions: SokosumiDelegationOptions = {
+  organizationId: "org-1",
+  organizationSlug: "org"
+};
+if (generalClient.getUser) {
+  const userResult: Promise<SokosumiUser | undefined> = generalClient.getUser("user-1", delegationOptions);
+  void userResult;
+}
+if (generalClient.createCoworkerUsage) {
+  const usageResult: Promise<SokosumiCoworkerUsage> = generalClient.createCoworkerUsage({
+    userId: "user-1",
+    idempotencyKey: "usage-1",
+    credits: 1
+  });
+  void usageResult;
+}
 
 const identityOptions: ResolveSokosumiIdentityOptions = {
   headers: { "x-delegation-user-id": "user-1" }
@@ -299,6 +431,19 @@ const taskEventToolInput: SokosumiCreateTaskEventToolInput = {
   credits: 1
 };
 void taskEventToolInput;
+const authenticationTaskEventToolInput: SokosumiCreateTaskEventToolInput = {
+  taskId: "task-1",
+  status: "AUTHENTICATION_REQUIRED",
+  authenticationUrl: "https://example.test/authorize",
+  origin: "SOKOSUMI"
+};
+void authenticationTaskEventToolInput;
+// @ts-expect-error authentication tool events require an authorization URL
+const invalidAuthenticationTaskEventToolInput: SokosumiCreateTaskEventToolInput = {
+  taskId: "task-1",
+  status: "AUTHENTICATION_REQUIRED"
+};
+void invalidAuthenticationTaskEventToolInput;
 const invalidTaskEventToolInput: SokosumiCreateTaskEventToolInput = {
   taskId: "task-1",
   status: "RUNNING",
@@ -593,12 +738,16 @@ void masumiClient.listPayments({
   filterSmartContractAddress: "address",
   includeHistory: true
 });
-void masumiClient.submitResult({
+const submitResultPromise = masumiClient.submitResult({
   network: "Mainnet",
   blockchainIdentifier: "blockchain-1",
   submitResultHash: "abc123",
   resultHash: "abc123"
 });
+const typedSubmitResult: Promise<MasumiSubmitResultResponse> = submitResultPromise;
+const typedSubmitDetails: Promise<MasumiPaymentDetails> = submitResultPromise;
+void typedSubmitResult;
+void typedSubmitDetails;
 // @ts-expect-error submit-result requires one supported hash property
 void masumiClient.submitResult({ blockchainIdentifier: "blockchain-1" });
 const network: MasumiNetwork = normalizeMasumiNetwork("preproduction");
@@ -693,6 +842,35 @@ const completionHookOptions: MasumiCompletionHooksOptions = {
   logger: console
 };
 const completionHooks = createMasumiCompletionHooks(completionHookOptions);
+const minimalCompletionClient: MasumiCompletionPaymentClient = {
+  async createPayment(input) {
+    void input.taskId;
+    return {
+      id: "payment-minimal",
+      blockchainIdentifier: "blockchain-minimal",
+      agentIdentifier: "agent-minimal",
+      payByTime: "1775737949000",
+      submitResultTime: "1775681853000",
+      unlockTime: "1775763149000",
+      externalDisputeUnlockTime: "1775784749000",
+      inputHash: "a".repeat(64),
+      identifierFromPurchaser: "0011223344556677",
+      RequestedFunds: [{ amount: "30000", unit: "unit" }],
+      PaymentSource: {
+        network: "Preprod",
+        smartContractAddress: "addr_test_contract",
+        policyId: "policy"
+      },
+      SmartContractWallet: {
+        walletVkey: "seller-vkey"
+      }
+    };
+  }
+};
+const minimalCompletionHookOptions: MasumiCompletionHooksOptions = {
+  masumiClient: minimalCompletionClient
+};
+void createMasumiCompletionHooks(minimalCompletionHookOptions);
 const paymentPollerOptions: MasumiPaymentPollerOptions = {
   enabled: true,
   client: masumiClient,

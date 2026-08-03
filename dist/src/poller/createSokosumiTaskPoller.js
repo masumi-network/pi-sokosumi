@@ -442,7 +442,7 @@ function isCancelRequestedTaskEvent(event, task) {
     return isCancelRequestedStatus(event?.status) || isCancelRequestedStatus(task?.status);
 }
 function isCancelRequestedStatus(status) {
-    return normalizeStatus(status) === SOKOSUMI_TASK_EVENT_STATUS.CANCEL_REQUESTED;
+    return normalizeStatus(status) === "CANCEL_REQUESTED";
 }
 function isCanceledStatus(status) {
     return isSokosumiCanceledTaskEventStatus(normalizeStatus(status));
@@ -619,7 +619,7 @@ function toSokosumiTaskStatus(status) {
         case SOKOSUMI_TASK_EVENT_STATUS.INPUT_REQUIRED:
         case SOKOSUMI_TASK_EVENT_STATUS.AUTHENTICATION_REQUIRED:
         case SOKOSUMI_TASK_EVENT_STATUS.OUT_OF_CREDITS:
-        case SOKOSUMI_TASK_EVENT_STATUS.CANCEL_REQUESTED:
+        case "CANCEL_REQUESTED":
             return "awaiting_approval";
         case SOKOSUMI_TASK_EVENT_STATUS.COMPLETED:
         case "DONE":

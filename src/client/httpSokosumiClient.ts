@@ -1,6 +1,6 @@
 import {
-  SOKOSUMI_COWORKER_PROGRESS_STATUSES,
-  SOKOSUMI_EVENT_ORIGINS,
+  SOKOSUMI_EVENT_CHANNELS,
+  SOKOSUMI_TASK_LINK_RELATIONS,
   SOKOSUMI_TASK_EVENT_STATUSES,
   type CreateCoworkerUsageInput,
   type ListSokosumiCoworkerEventsInput,
@@ -12,7 +12,6 @@ import {
   type SokosumiTaskEvent,
   type SokosumiTaskEventInput,
   type SokosumiTaskSnapshot,
-  type SokosumiTaskStatus,
   type SokosumiUser,
   type UpdateTaskInput
 } from "./types.js";
@@ -306,45 +305,100 @@ function expectArray(value: unknown, label: string): unknown[] {
 
 function narrowTask(value: unknown, label: string): SokosumiTaskSnapshot {
   const task = expectRecord(value, label);
-  for (const key of ["id", "name", "title", "description", "body", "content", "userId", "createdAt", "updatedAt"]) {
+  for (const key of ["id", "createdAt", "updatedAt", "ownerId", "userId", "name"]) {
+    expectString(task[key], `${label}.${key}`);
+  }
+  narrowUserSummary(task.owner, `${label}.owner`);
+  narrowUserSummary(task.user, `${label}.user`);
+  expectNullableRecord(task.organization, `${label}.organization`);
+  for (const key of [
+    "organizationId",
+    "projectId",
+    "assigneeId",
+    "coworkerId",
+    "orchestratorId",
+    "pendingVendorGrantId",
+    "nextRunAt",
+    "description"
+  ]) {
+    expectNullableString(task[key], `${label}.${key}`);
+  }
+  task.assignee === null
+    ? null
+    : narrowCoworkerSummary(task.assignee, `${label}.assignee`);
+  task.coworker === null
+    ? null
+    : narrowCoworkerSummary(task.coworker, `${label}.coworker`);
+  narrowTaskEventActor(task.creator, `${label}.creator`);
+  task.orchestrator === null
+    ? null
+    : narrowOrchestratorSummary(task.orchestrator, `${label}.orchestrator`);
+  expectTaskEventStatus(task.status, `${label}.status`);
+  if (task.grantResumeStatus !== null && task.grantResumeStatus !== "DRAFT" && task.grantResumeStatus !== "READY") {
+    throwInvalidResponse(`${label}.grantResumeStatus must be DRAFT, READY, or null.`, task.grantResumeStatus);
+  }
+  if (task.metadata !== null && typeof task.metadata !== "string") {
+    throwInvalidResponse(`${label}.metadata must be a string or null.`, task.metadata);
+  }
+  expectNumber(task.credits, `${label}.credits`);
+  const events = expectArray(task.events, `${label}.events`);
+  task.events = events.map((event, index) => narrowTaskEvent(event, `${label}.events[${index}]`));
+  expectRecordArray(task.jobs, `${label}.jobs`);
+  expectRecord(task.workspace, `${label}.workspace`);
+  expectNullableRecord(task.share, `${label}.share`);
+  task.links = expectArray(task.links, `${label}.links`).map((link, index) =>
+    narrowTaskLink(link, `${label}.links[${index}]`)
+  );
+  expectRecordArray(task.files, `${label}.files`);
+  for (const key of ["title", "body", "content"]) {
     assertOptionalString(task[key], `${label}.${key}`);
-  }
-  assertOptionalStringOrNull(task.organizationId, `${label}.organizationId`);
-  assertOptionalStatus(task.status, `${label}.status`);
-  assertOptionalRecord(task.metadata, `${label}.metadata`);
-  if (task.events !== undefined && !Array.isArray(task.events)) {
-    throwInvalidResponse(`${label}.events must be an array when provided.`, task.events);
-  }
-  if (Array.isArray(task.events)) {
-    task.events.forEach((event, index) => narrowTaskEvent(event, `${label}.events[${index}]`));
   }
   return task as SokosumiTaskSnapshot;
 }
 
 function narrowTaskEvent(value: unknown, label: string): SokosumiTaskEvent {
   const event = expectRecord(value, label);
+  for (const key of ["id", "taskId", "createdAt", "updatedAt"]) {
+    expectString(event[key], `${label}.${key}`);
+  }
+  if (event.actor === null) {
+    // Null is an explicit upstream state when no actor foreign key is set.
+  } else {
+    narrowTaskEventActor(event.actor, `${label}.actor`);
+  }
+  expectEventChannel(event.channel, `${label}.channel`);
+  expectEventChannel(event.origin, `${label}.origin`);
   for (const key of [
-    "id",
-    "taskId",
-    "comment",
     "message",
     "body",
     "content",
     "description",
     "title",
     "name",
-    "createdAt",
     "created_at",
-    "updatedAt",
     "updated_at"
   ]) {
     assertOptionalString(event[key], `${label}.${key}`);
   }
+  for (const key of ["transactionId", "comment", "authenticationUrl"]) {
+    assertOptionalStringOrNull(event[key], `${label}.${key}`);
+  }
+  if (event.credits !== undefined && event.credits !== null && typeof event.credits !== "number") {
+    throwInvalidResponse(`${label}.credits must be a number or null when provided.`, event.credits);
+  }
   assertOptionalStringOrNull(event.coworkerId, `${label}.coworkerId`);
   assertOptionalStringOrNull(event.coworker_id, `${label}.coworker_id`);
   assertOptionalStringOrNull(event.userId, `${label}.userId`);
-  assertOptionalRecordOrNull(event.coworker, `${label}.coworker`);
-  assertOptionalRecordOrNull(event.user, `${label}.user`);
+  assertOptionalStringOrNull(event.orchestratorId, `${label}.orchestratorId`);
+  if (event.coworker !== undefined && event.coworker !== null) {
+    narrowCoworkerSummary(event.coworker, `${label}.coworker`);
+  }
+  if (event.user !== undefined && event.user !== null) {
+    narrowUserSummary(event.user, `${label}.user`);
+  }
+  if (event.orchestrator !== undefined && event.orchestrator !== null) {
+    narrowOrchestratorSummary(event.orchestrator, `${label}.orchestrator`);
+  }
   assertOptionalRecord(event.metadata, `${label}.metadata`);
   assertOptionalArray(event.attachments, `${label}.attachments`);
   assertOptionalArray(event.media, `${label}.media`);
@@ -359,13 +413,9 @@ function narrowTaskEvent(value: unknown, label: string): SokosumiTaskEvent {
   if (
     event.status !== undefined &&
     event.status !== null &&
-    !SOKOSUMI_COWORKER_PROGRESS_STATUSES.some((status) => status === event.status) &&
     !SOKOSUMI_TASK_EVENT_STATUSES.some((status) => status === event.status)
   ) {
     throwInvalidResponse(`${label}.status is not a supported Sokosumi event status.`, event.status);
-  }
-  if (event.origin !== undefined && event.origin !== null && !SOKOSUMI_EVENT_ORIGINS.some((origin) => origin === event.origin)) {
-    throwInvalidResponse(`${label}.origin is not a supported Sokosumi event origin.`, event.origin);
   }
   return event as SokosumiTaskEvent;
 }
@@ -398,10 +448,112 @@ function assertOptionalRecord(value: unknown, label: string): void {
   }
 }
 
-function assertOptionalRecordOrNull(value: unknown, label: string): void {
-  if (value !== undefined && value !== null && !isRecord(value)) {
-    throwInvalidResponse(`${label} must be a JSON object or null when provided.`, value);
+function expectString(value: unknown, label: string): string {
+  if (typeof value !== "string") {
+    throwInvalidResponse(`${label} must be a string.`, value);
   }
+  return value;
+}
+
+function expectNullableString(value: unknown, label: string): string | null {
+  if (value !== null && typeof value !== "string") {
+    throwInvalidResponse(`${label} must be a string or null.`, value);
+  }
+  // TypeScript does not retain the compound unknown narrowing with strict mode disabled.
+  return value as string | null;
+}
+
+function expectNumber(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throwInvalidResponse(`${label} must be a finite number.`, value);
+  }
+  return value;
+}
+
+function expectBoolean(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean") {
+    throwInvalidResponse(`${label} must be a boolean.`, value);
+  }
+  return value;
+}
+
+function expectNullableRecord(value: unknown, label: string): Record<string, unknown> | null {
+  return value === null ? null : expectRecord(value, label);
+}
+
+function expectRecordArray(value: unknown, label: string): Record<string, unknown>[] {
+  return expectArray(value, label).map((item, index) => expectRecord(item, `${label}[${index}]`));
+}
+
+function expectStringArray(value: unknown, label: string): string[] {
+  return expectArray(value, label).map((item, index) => expectString(item, `${label}[${index}]`));
+}
+
+function expectTaskEventStatus(value: unknown, label: string): void {
+  if (!SOKOSUMI_TASK_EVENT_STATUSES.some((status) => status === value)) {
+    throwInvalidResponse(`${label} is not a supported Sokosumi task status.`, value);
+  }
+}
+
+function expectEventChannel(value: unknown, label: string): void {
+  if (!SOKOSUMI_EVENT_CHANNELS.some((channel) => channel === value)) {
+    throwInvalidResponse(`${label} is not a supported Sokosumi event channel.`, value);
+  }
+}
+
+function narrowUserSummary(value: unknown, label: string): Record<string, unknown> {
+  const user = expectRecord(value, label);
+  expectString(user.id, `${label}.id`);
+  expectString(user.name, `${label}.name`);
+  assertOptionalStringOrNull(user.image, `${label}.image`);
+  return user;
+}
+
+function narrowCoworkerSummary(value: unknown, label: string): Record<string, unknown> {
+  const coworker = expectRecord(value, label);
+  expectString(coworker.id, `${label}.id`);
+  expectString(coworker.name, `${label}.name`);
+  expectString(coworker.slug, `${label}.slug`);
+  assertOptionalStringOrNull(coworker.image, `${label}.image`);
+  return coworker;
+}
+
+function narrowOrchestratorSummary(value: unknown, label: string): Record<string, unknown> {
+  const orchestrator = expectRecord(value, label);
+  expectString(orchestrator.id, `${label}.id`);
+  return orchestrator;
+}
+
+function narrowTaskEventActor(value: unknown, label: string): Record<string, unknown> {
+  const actor = expectRecord(value, label);
+  expectString(actor.id, `${label}.id`);
+  if (actor.type === "user") {
+    narrowUserSummary(actor.user, `${label}.user`);
+  } else if (actor.type === "coworker") {
+    narrowCoworkerSummary(actor.coworker, `${label}.coworker`);
+  } else if (actor.type === "orchestrator") {
+    narrowOrchestratorSummary(actor.orchestrator, `${label}.orchestrator`);
+  } else {
+    throwInvalidResponse(`${label}.type must identify a user, coworker, or orchestrator.`, actor.type);
+  }
+  return actor;
+}
+
+function narrowTaskLink(value: unknown, label: string): Record<string, unknown> {
+  const link = expectRecord(value, label);
+  for (const key of ["id", "createdAt", "updatedAt"]) {
+    expectString(link[key], `${label}.${key}`);
+  }
+  if (!SOKOSUMI_TASK_LINK_RELATIONS.some((relation) => relation === link.relation)) {
+    throwInvalidResponse(`${label}.relation is not a supported task-link relation.`, link.relation);
+  }
+  const peerTask = expectRecord(link.peerTask, `${label}.peerTask`);
+  expectString(peerTask.id, `${label}.peerTask.id`);
+  expectString(peerTask.name, `${label}.peerTask.name`);
+  expectTaskEventStatus(peerTask.status, `${label}.peerTask.status`);
+  expectNullableString(peerTask.archivedAt, `${label}.peerTask.archivedAt`);
+  expectNullableString(link.note, `${label}.note`);
+  return link;
 }
 
 function assertOptionalArray(value: unknown, label: string): void {
@@ -412,47 +564,50 @@ function assertOptionalArray(value: unknown, label: string): void {
 
 function narrowCoworker(value: unknown): SokosumiCoworker {
   const coworker = expectRecord(value, "Sokosumi coworker");
-  for (const key of ["id", "name", "slug"]) {
-    assertOptionalString(coworker[key], `Sokosumi coworker.${key}`);
+  for (const key of ["id", "createdAt", "updatedAt", "slug", "name"]) {
+    expectString(coworker[key], `Sokosumi coworker.${key}`);
   }
+  expectNullableString(coworker.archivedAt, "Sokosumi coworker.archivedAt");
+  expectBoolean(coworker.isWhitelisted, "Sokosumi coworker.isWhitelisted");
+  expectNumber(coworker.priority, "Sokosumi coworker.priority");
+  for (const key of ["caption", "url", "description", "image"]) {
+    assertOptionalStringOrNull(coworker[key], `Sokosumi coworker.${key}`);
+  }
+  expectRecord(coworker.vendor, "Sokosumi coworker.vendor");
+  expectNullableString(coworker.baseURL, "Sokosumi coworker.baseURL");
+  expectStringArray(coworker.capabilities, "Sokosumi coworker.capabilities");
+  expectNullableRecord(coworker.metadata, "Sokosumi coworker.metadata");
   return coworker as SokosumiCoworker;
 }
 
 function narrowUser(value: unknown): SokosumiUser {
   const user = expectRecord(value, "Sokosumi user");
-  for (const key of ["id", "name", "image"]) {
-    assertOptionalString(user[key], `Sokosumi user.${key}`);
+  for (const key of ["id", "createdAt", "updatedAt", "name", "email", "role"]) {
+    expectString(user[key], `Sokosumi user.${key}`);
   }
+  expectBoolean(user.emailVerified, "Sokosumi user.emailVerified");
+  assertOptionalStringOrNull(user.image, "Sokosumi user.image");
   assertOptionalStringOrNull(user.organizationId, "Sokosumi user.organizationId");
   return user as SokosumiUser;
 }
 
 function narrowCoworkerUsage(value: unknown): SokosumiCoworkerUsage {
   const usage = expectRecord(value, "Sokosumi coworker usage");
-  for (const key of ["id", "userId", "referenceId"]) {
-    assertOptionalString(usage[key], `Sokosumi coworker usage.${key}`);
+  for (const key of [
+    "id",
+    "createdAt",
+    "updatedAt",
+    "idempotencyKey",
+    "coworkerId",
+    "userId",
+    "transactionId"
+  ]) {
+    expectString(usage[key], `Sokosumi coworker usage.${key}`);
   }
-  assertOptionalStringOrNull(usage.organizationId, "Sokosumi coworker usage.organizationId");
-  if (usage.credits !== undefined && typeof usage.credits !== "number") {
-    throwInvalidResponse("Sokosumi coworker usage.credits must be a number when provided.", usage.credits);
-  }
+  expectNullableString(usage.referenceId, "Sokosumi coworker usage.referenceId");
+  expectNullableString(usage.organizationId, "Sokosumi coworker usage.organizationId");
+  expectNumber(usage.credits, "Sokosumi coworker usage.credits");
   return usage as SokosumiCoworkerUsage;
-}
-
-function assertOptionalStatus(value: unknown, label: string): void {
-  if (value === undefined || value === null) return;
-  if (typeof value !== "string") {
-    throwInvalidResponse(`${label} must be a string or null when provided.`, value);
-  }
-  const lowerStatuses: readonly SokosumiTaskStatus[] = ["draft", "in_progress", "awaiting_approval", "done", "failed"];
-  if (
-    !lowerStatuses.some((status) => status === value) &&
-    !SOKOSUMI_TASK_EVENT_STATUSES.some((status) => status === value) &&
-    value !== "CANCELLED" &&
-    value !== "DONE"
-  ) {
-    throwInvalidResponse(`${label} is not a supported Sokosumi task status.`, value);
-  }
 }
 
 function throwInvalidResponse(message: string, payload: unknown): never {
@@ -468,11 +623,21 @@ export type {
   ListSokosumiCoworkerEventsInput,
   SokosumiCoworker,
   SokosumiCoworkerEventPage,
+  SokosumiCoworkerSummary,
   SokosumiCoworkerUsage,
   SokosumiDelegationOptions,
+  SokosumiEventChannel,
+  SokosumiEventOrigin,
+  SokosumiNonAuthenticationTaskEventStatus,
+  SokosumiOrchestratorSummary,
   SokosumiPagination,
+  SokosumiTaskCreator,
   SokosumiTaskEvent,
+  SokosumiTaskEventActor,
   SokosumiTaskEventInput,
+  SokosumiTaskLink,
+  SokosumiTaskLinkRelation,
   SokosumiTaskSnapshot,
-  SokosumiUser
+  SokosumiUser,
+  SokosumiUserSummary
 } from "./types.js";

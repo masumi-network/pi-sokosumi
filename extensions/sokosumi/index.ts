@@ -7,6 +7,7 @@ import {
   isSokosumiTaskEventStatus,
   normalizeSokosumiTaskStatus,
   type SokosumiEventOrigin,
+  type SokosumiNonAuthenticationTaskEventStatus,
   type SokosumiTaskEvent,
   type SokosumiTaskEventStatus,
   type SokosumiTaskSnapshot
@@ -28,9 +29,9 @@ export type SokosumiExtensionConfig = {
   skipExistingProgress: boolean;
   pollerMode: SokosumiExtensionPollerMode;
   claimEnabled: boolean;
-  claimStatus: SokosumiTaskEventStatus;
-  completeStatus: SokosumiTaskEventStatus;
-  failStatus: SokosumiTaskEventStatus;
+  claimStatus: SokosumiNonAuthenticationTaskEventStatus;
+  completeStatus: SokosumiNonAuthenticationTaskEventStatus;
+  failStatus: SokosumiNonAuthenticationTaskEventStatus;
   origin: SokosumiEventOrigin;
   claimComment: string;
   completeComment: string;
@@ -150,9 +151,12 @@ function parseStatusList(value: string, fallback: SokosumiTaskEventStatus[]): So
   return statuses.length ? statuses : fallback;
 }
 
-function readTaskEventStatus(name: string, fallback: SokosumiTaskEventStatus): SokosumiTaskEventStatus {
+function readTaskEventStatus(
+  name: string,
+  fallback: SokosumiNonAuthenticationTaskEventStatus
+): SokosumiNonAuthenticationTaskEventStatus {
   const value = normalizeSokosumiTaskStatus(readEnv(name));
-  return isSokosumiTaskEventStatus(value) ? value : fallback;
+  return isSokosumiTaskEventStatus(value) && value !== "AUTHENTICATION_REQUIRED" ? value : fallback;
 }
 
 function readEventOrigin(name: string, fallback: SokosumiEventOrigin): SokosumiEventOrigin {

@@ -1,5 +1,5 @@
 import type { PiExtensionAPI } from "../../src/piTypes.js";
-import { type SokosumiEventOrigin, type SokosumiTaskEventStatus } from "../../src/client/types.js";
+import { type SokosumiEventOrigin, type SokosumiNonAuthenticationTaskEventStatus, type SokosumiTaskEventStatus } from "../../src/client/types.js";
 export type SokosumiExtensionMode = "api" | "disabled";
 export type SokosumiExtensionPollerMode = "claim" | "complete";
 export type SokosumiExtensionConfig = {
@@ -14,9 +14,9 @@ export type SokosumiExtensionConfig = {
     skipExistingProgress: boolean;
     pollerMode: SokosumiExtensionPollerMode;
     claimEnabled: boolean;
-    claimStatus: SokosumiTaskEventStatus;
-    completeStatus: SokosumiTaskEventStatus;
-    failStatus: SokosumiTaskEventStatus;
+    claimStatus: SokosumiNonAuthenticationTaskEventStatus;
+    completeStatus: SokosumiNonAuthenticationTaskEventStatus;
+    failStatus: SokosumiNonAuthenticationTaskEventStatus;
     origin: SokosumiEventOrigin;
     claimComment: string;
     completeComment: string;

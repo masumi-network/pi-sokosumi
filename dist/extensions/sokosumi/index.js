@@ -103,7 +103,7 @@ function parseStatusList(value, fallback) {
 }
 function readTaskEventStatus(name, fallback) {
     const value = normalizeSokosumiTaskStatus(readEnv(name));
-    return isSokosumiTaskEventStatus(value) ? value : fallback;
+    return isSokosumiTaskEventStatus(value) && value !== "AUTHENTICATION_REQUIRED" ? value : fallback;
 }
 function readEventOrigin(name, fallback) {
     const value = readEnv(name).trim().toUpperCase();

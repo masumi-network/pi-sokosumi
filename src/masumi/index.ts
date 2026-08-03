@@ -70,6 +70,7 @@ export type {
   MasumiCompletionBeforeHookResult,
   MasumiCompletionHooks,
   MasumiCompletionHooksOptions,
+  MasumiCompletionPaymentClient,
   MasumiCompletionTaskEvent
 } from "./createMasumiCompletionHooks.js";
 export { createMasumiPaymentPoller, isReadyForSubmitResult } from "./createMasumiPaymentPoller.js";

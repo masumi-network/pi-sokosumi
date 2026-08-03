@@ -126,7 +126,7 @@ export function createMasumiPaymentClient({ apiUrl, apiToken, agentIdentifier, n
                 method: "POST",
                 body
             });
-            return expectRecord(expectSuccess(payload, "Masumi submit result"), "Masumi submit result data");
+            return narrowPaymentDetails(expectSuccess(payload, "Masumi submit result"), "Masumi submit result data");
         }
     };
     async function request(path, requestOptions = {}) {

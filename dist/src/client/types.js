@@ -1,5 +1,4 @@
-export const SOKOSUMI_EVENT_ORIGINS = [
-    "USER",
+export const SOKOSUMI_EVENT_CHANNELS = [
     "SLACK",
     "TEAMS",
     "EMAIL",
@@ -14,10 +13,15 @@ export const SOKOSUMI_EVENT_ORIGINS = [
     "SOKOSUMI",
     "UNKNOWN"
 ];
+/** @deprecated Sokosumi calls this field `channel`; use SOKOSUMI_EVENT_CHANNELS. */
+export const SOKOSUMI_EVENT_ORIGINS = SOKOSUMI_EVENT_CHANNELS;
 export const SOKOSUMI_TASK_EVENT_STATUSES = [
     "DRAFT",
+    "QUEUED",
     "READY",
+    "GRANT_PENDING",
     "INPUT_REQUIRED",
+    "APPROVAL_REQUIRED",
     "AUTHENTICATION_REQUIRED",
     "OUT_OF_CREDITS",
     "CREDITS_TOPPED_UP",
@@ -25,20 +29,12 @@ export const SOKOSUMI_TASK_EVENT_STATUSES = [
     "AWAITING_EXTERNAL",
     "COMPLETED",
     "FAILED",
-    "CANCEL_REQUESTED",
     "CANCELED"
 ];
 export const SOKOSUMI_TASK_EVENT_STATUS = Object.freeze(Object.fromEntries(SOKOSUMI_TASK_EVENT_STATUSES.map((status) => [status, status])));
 export const SOKOSUMI_COWORKER_PROGRESS_STATUSES = [
-    "RUNNING",
-    "AWAITING_EXTERNAL",
-    "INPUT_REQUIRED",
-    "AUTHENTICATION_REQUIRED",
-    "OUT_OF_CREDITS",
-    "COMPLETED",
-    "FAILED",
+    ...SOKOSUMI_TASK_EVENT_STATUSES,
     "CANCEL_REQUESTED",
-    "CANCELED",
     "CANCELLED",
     "DONE"
 ];
@@ -94,4 +90,14 @@ export function normalizeSokosumiTaskStatus(status) {
         .replace(/[\s-]+/g, "_")
         .toUpperCase();
 }
+export const SOKOSUMI_TASK_LINK_RELATIONS = [
+    "related",
+    "blocks",
+    "blocked_by",
+    "parent",
+    "child",
+    "duplicate",
+    "schedule_run",
+    "schedule_series"
+];
 //# sourceMappingURL=types.js.map

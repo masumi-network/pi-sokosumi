@@ -239,7 +239,7 @@ export type MasumiSubmitResultInput = MasumiSubmitResultHash & {
   blockchainIdentifier: string;
 };
 
-export type MasumiSubmitResultResponse = Record<string, unknown>;
+export type MasumiSubmitResultResponse = MasumiPaymentDetails;
 
 export type MasumiFetch = (
   input: string | URL | Request,
@@ -386,7 +386,7 @@ export function createMasumiPaymentClient({
         method: "POST",
         body
       });
-      return expectRecord(expectSuccess(payload, "Masumi submit result"), "Masumi submit result data");
+      return narrowPaymentDetails(expectSuccess(payload, "Masumi submit result"), "Masumi submit result data");
     }
   };
 
