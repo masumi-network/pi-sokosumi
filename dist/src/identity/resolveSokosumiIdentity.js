@@ -1,4 +1,4 @@
-import { isRecord } from "../sharedTypes.js";
+import { getPathValue as path, getProperty as property, getRecordProperty as recordProperty, isRecord } from "../sharedTypes.js";
 const ID_KEYS = ["sokosumiUserId", "sokosumi_user_id", "userId", "user_id", "createdById", "ownerId", "customerId", "sub"];
 const HEADER_USER_ID_KEYS = [
     "x-delegation-user-id",
@@ -150,22 +150,6 @@ function normalizeHeaderValue(value) {
     if (Array.isArray(value))
         return firstString(...value);
     return firstString(value);
-}
-function property(source, key) {
-    return source?.[key];
-}
-function recordProperty(source, key) {
-    const value = property(source, key);
-    return isRecord(value) ? value : undefined;
-}
-function path(source, ...keys) {
-    let value = source;
-    for (const key of keys) {
-        if (!isRecord(value))
-            return undefined;
-        value = value[key];
-    }
-    return value;
 }
 function firstString(...values) {
     for (const value of values) {

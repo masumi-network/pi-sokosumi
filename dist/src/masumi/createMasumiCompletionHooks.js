@@ -5,7 +5,6 @@ export function createMasumiCompletionHooks({ enabled = true, masumiClient, stor
     return {
         async beforeTaskEventCreated(input) {
             const taskEvent = input.taskEvent;
-            assertMasumiCompatibleTaskEvent(taskEvent);
             if (!enabled || !masumiClient)
                 return taskEvent;
             if (!isCompletedTaskEvent(taskEvent) || taskEvent.masumiPayment)
@@ -43,9 +42,11 @@ export function createMasumiCompletionHooks({ enabled = true, masumiClient, stor
         },
         async afterTaskEventCreated(input) {
             const taskEvent = input.taskEvent;
-            const masumiPayment = taskEvent.masumiPayment;
-            if (!enabled || !masumiPayment)
+            const payment = taskEvent.masumiPayment;
+            if (!enabled || !payment)
                 return undefined;
+            assertSokosumiMasumiPaymentPayload(payment);
+            const masumiPayment = payment;
             if (!store?.recordPendingMasumiPayment) {
                 log(logger, "masumi_pending_payment_store_unavailable", {
                     taskId: input.taskId || input.task?.id || input.event?.taskId || "",
@@ -116,10 +117,7 @@ function createDefaultPaymentMetadata({ taskId, task, event, taskEvent, costCent
 function metadataCredits(value) {
     return isRecord(value) ? value.credits : undefined;
 }
-function assertMasumiCompatibleTaskEvent(taskEvent) {
-    const payment = taskEvent.masumiPayment;
-    if (payment === undefined || payment === null)
-        return;
+function assertSokosumiMasumiPaymentPayload(payment) {
     if (!isRecord(payment) ||
         typeof payment.id !== "string" ||
         typeof payment.blockchainIdentifier !== "string" ||

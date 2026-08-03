@@ -8,14 +8,41 @@ export const MASUMI_USDM_UNITS = Object.freeze({
 export const MASUMI_CENT_RAW_UNITS = 10000n;
 export const MASUMI_DEFAULT_PAY_BY_MS = 16 * 60 * 60 * 1000;
 export const MASUMI_DEFAULT_SUBMIT_RESULT_MS = 17 * 60 * 60 * 1000;
-export const MASUMI_ESCROW_STATES = [
-    "FundsLockingRequested",
+export const MASUMI_PAYMENT_ACTIONS = [
+    "None",
+    "Ignore",
+    "WaitingForManualAction",
+    "WaitingForExternalAction",
+    "SubmitResultRequested",
+    "SubmitResultInitiated",
+    "WithdrawRequested",
+    "WithdrawInitiated",
+    "AuthorizeRefundRequested",
+    "AuthorizeRefundInitiated"
+];
+export const MASUMI_ON_CHAIN_STATES = [
     "FundsLocked",
+    "FundsOrDatumInvalid",
     "ResultSubmitted",
-    "Completed",
     "RefundRequested",
+    "Disputed",
+    "WithdrawAuthorized",
     "RefundAuthorized",
-    "Disputed"
+    "Withdrawn",
+    "RefundWithdrawn",
+    "DisputedWithdrawn"
+];
+/** @deprecated Use MASUMI_ON_CHAIN_STATES. */
+export const MASUMI_ESCROW_STATES = MASUMI_ON_CHAIN_STATES;
+export const MASUMI_PAYMENT_ERROR_TYPES = ["NetworkError", "Unknown"];
+export const MASUMI_PAYMENT_SOURCE_TYPES = ["Web3CardanoV1", "Web3CardanoV2"];
+export const MASUMI_PRICING_TYPES = ["Fixed", "Free", "Dynamic"];
+export const MASUMI_TRANSACTION_STATUSES = [
+    "Pending",
+    "Confirmed",
+    "FailedViaTimeout",
+    "FailedViaManualReset",
+    "RolledBack"
 ];
 export class MasumiPaymentError extends Error {
     code;
@@ -68,7 +95,7 @@ export function createMasumiPaymentClient({ apiUrl, apiToken, agentIdentifier, n
                 method: "POST",
                 body
             });
-            const data = narrowPayment(expectSuccess(payload, "Masumi create payment"), "Masumi create payment data");
+            const data = narrowPaymentDetails(expectSuccess(payload, "Masumi create payment"), "Masumi create payment data");
             return {
                 ...data,
                 requestBody: body,
@@ -300,38 +327,61 @@ function expectSuccess(payload, label) {
     }
     return payload.data ?? payload;
 }
-function narrowPayment(value, label) {
+function narrowPaymentDetails(value, label) {
     const payment = expectRecord(value, label);
     for (const key of [
         "id",
+        "createdAt",
+        "updatedAt",
         "blockchainIdentifier",
-        "agentIdentifier",
-        "payByTime",
         "submitResultTime",
         "unlockTime",
         "externalDisputeUnlockTime",
-        "inputHash",
-        "identifierFromPurchaser"
+        "requestedById",
+        "nextActionLastChangedAt",
+        "onChainStateOrResultLastChangedAt",
+        "nextActionOrOnChainStateOrResultLastChangedAt"
     ]) {
-        assertOptionalString(payment[key], `${label}.${key}`);
+        assertRequiredString(payment[key], `${label}.${key}`);
     }
-    if (payment.RequestedFunds !== undefined)
-        payment.RequestedFunds = narrowAmounts(payment.RequestedFunds, `${label}.RequestedFunds`);
-    if (payment.Amounts !== undefined)
-        payment.Amounts = narrowAmounts(payment.Amounts, `${label}.Amounts`);
-    if (payment.PaymentSource !== undefined)
-        payment.PaymentSource = narrowPaymentSource(payment.PaymentSource, `${label}.PaymentSource`);
-    if (payment.SmartContractWallet !== undefined)
-        payment.SmartContractWallet = narrowWallet(payment.SmartContractWallet, `${label}.SmartContractWallet`);
-    if (payment.SellerWallet !== undefined)
-        payment.SellerWallet = narrowWallet(payment.SellerWallet, `${label}.SellerWallet`);
-    if (payment.NextAction !== undefined)
-        payment.NextAction = narrowNextAction(payment.NextAction, `${label}.NextAction`);
-    if (payment.onChainState !== undefined &&
-        payment.onChainState !== null &&
-        !MASUMI_ESCROW_STATES.some((state) => state === payment.onChainState)) {
-        throwInvalidResponse(`${label}.onChainState is not a supported Masumi escrow state.`, payment.onChainState);
+    for (const key of [
+        "agentIdentifier",
+        "agentName",
+        "lastCheckedAt",
+        "payByTime",
+        "collateralReturnLovelace",
+        "buyerReturnAddress",
+        "sellerReturnAddress",
+        "resultHash",
+        "inputHash",
+        "metadata"
+    ]) {
+        assertNullableString(payment[key], `${label}.${key}`);
     }
+    assertLiteral(payment.pricingType, MASUMI_PRICING_TYPES, `${label}.pricingType`);
+    for (const key of [
+        "totalBuyerCardanoFees",
+        "totalSellerCardanoFees",
+        "cooldownTime",
+        "cooldownTimeOtherParty"
+    ]) {
+        assertRequiredNumber(payment[key], `${label}.${key}`);
+    }
+    assertNullableLiteral(payment.onChainState, MASUMI_ON_CHAIN_STATES, `${label}.onChainState`);
+    payment.NextAction = narrowNextAction(payment.NextAction, `${label}.NextAction`);
+    payment.CurrentTransaction = narrowNullableTransaction(payment.CurrentTransaction, `${label}.CurrentTransaction`);
+    payment.RequestedFunds = narrowAmounts(payment.RequestedFunds, `${label}.RequestedFunds`);
+    payment.WithdrawnForSeller = narrowAmounts(payment.WithdrawnForSeller, `${label}.WithdrawnForSeller`);
+    payment.WithdrawnForBuyer = narrowAmounts(payment.WithdrawnForBuyer, `${label}.WithdrawnForBuyer`);
+    payment.PaymentSource = narrowPaymentSource(payment.PaymentSource, `${label}.PaymentSource`);
+    payment.BuyerWallet = narrowNullableBuyerWallet(payment.BuyerWallet, `${label}.BuyerWallet`);
+    payment.SmartContractWallet = narrowNullableWallet(payment.SmartContractWallet, `${label}.SmartContractWallet`);
+    return payment;
+}
+function narrowPayment(value, label) {
+    const payment = narrowPaymentDetails(value, label);
+    payment.ActionHistory = narrowNullableActionHistory(payment.ActionHistory, `${label}.ActionHistory`);
+    payment.TransactionHistory = narrowNullableTransactionHistory(payment.TransactionHistory, `${label}.TransactionHistory`);
     return payment;
 }
 function narrowPaymentList(value) {
@@ -339,12 +389,10 @@ function narrowPaymentList(value) {
         return value.map((payment, index) => narrowPayment(payment, `Masumi payment ${index}`));
     }
     const page = expectRecord(value, "Masumi payment list data");
-    if (page.Payments !== undefined) {
-        if (!Array.isArray(page.Payments)) {
-            throwInvalidResponse("Masumi payment list Payments must be an array.", page.Payments);
-        }
-        page.Payments = page.Payments.map((payment, index) => narrowPayment(payment, `Masumi payment ${index}`));
+    if (!Array.isArray(page.Payments)) {
+        throwInvalidResponse("Masumi payment list Payments must be an array.", page.Payments);
     }
+    page.Payments = page.Payments.map((payment, index) => narrowPayment(payment, `Masumi payment ${index}`));
     return page;
 }
 function narrowAmounts(value, label) {
@@ -360,46 +408,110 @@ function narrowAmounts(value, label) {
 }
 function narrowPaymentSource(value, label) {
     const source = expectRecord(value, label);
-    if (source.network !== undefined && !MASUMI_NETWORKS.some((network) => network === source.network)) {
-        throwInvalidResponse(`${label}.network is not a supported Masumi network.`, source.network);
-    }
-    assertOptionalString(source.smartContractAddress, `${label}.smartContractAddress`);
-    if (source.policyId !== undefined && source.policyId !== null && typeof source.policyId !== "string") {
-        throwInvalidResponse(`${label}.policyId must be a string or null when provided.`, source.policyId);
-    }
+    assertRequiredString(source.id, `${label}.id`);
+    assertLiteral(source.network, MASUMI_NETWORKS, `${label}.network`);
+    assertLiteral(source.paymentSourceType, MASUMI_PAYMENT_SOURCE_TYPES, `${label}.paymentSourceType`);
+    assertRequiredString(source.smartContractAddress, `${label}.smartContractAddress`);
+    assertNullableString(source.policyId, `${label}.policyId`);
     return source;
 }
-function narrowWallet(value, label) {
+function narrowBuyerWallet(value, label) {
     const wallet = expectRecord(value, label);
-    if (wallet.walletVkey !== undefined && wallet.walletVkey !== null && typeof wallet.walletVkey !== "string") {
-        throwInvalidResponse(`${label}.walletVkey must be a string or null when provided.`, wallet.walletVkey);
-    }
+    assertRequiredString(wallet.id, `${label}.id`);
+    assertRequiredString(wallet.walletVkey, `${label}.walletVkey`);
+    return wallet;
+}
+function narrowWallet(value, label) {
+    const wallet = narrowBuyerWallet(value, label);
+    assertRequiredString(wallet.walletAddress, `${label}.walletAddress`);
     return wallet;
 }
 function narrowNextAction(value, label) {
     const action = expectRecord(value, label);
-    if (action.requestedAction !== undefined &&
-        action.requestedAction !== null &&
-        action.requestedAction !== "SubmitResultRequested" &&
-        !MASUMI_ESCROW_STATES.some((state) => state === action.requestedAction)) {
-        throwInvalidResponse(`${label}.requestedAction is not a supported Masumi payment action.`, action.requestedAction);
-    }
-    for (const key of ["errorType", "errorNote"]) {
-        if (action[key] !== undefined && action[key] !== null && typeof action[key] !== "string") {
-            throwInvalidResponse(`${label}.${key} must be a string or null when provided.`, action[key]);
-        }
-    }
+    assertLiteral(action.requestedAction, MASUMI_PAYMENT_ACTIONS, `${label}.requestedAction`);
+    assertNullableLiteral(action.errorType, MASUMI_PAYMENT_ERROR_TYPES, `${label}.errorType`);
+    assertNullableString(action.errorNote, `${label}.errorNote`);
+    assertNullableString(action.resultHash, `${label}.resultHash`);
     return action;
+}
+function narrowNullableBuyerWallet(value, label) {
+    return value === null ? null : narrowBuyerWallet(value, label);
+}
+function narrowNullableWallet(value, label) {
+    return value === null ? null : narrowWallet(value, label);
+}
+function narrowTransaction(value, label) {
+    const transaction = expectRecord(value, label);
+    for (const key of ["id", "createdAt", "updatedAt"]) {
+        assertRequiredString(transaction[key], `${label}.${key}`);
+    }
+    for (const key of ["fees", "txHash"]) {
+        assertNullableString(transaction[key], `${label}.${key}`);
+    }
+    for (const key of ["blockHeight", "blockTime", "confirmations"]) {
+        assertNullableNumber(transaction[key], `${label}.${key}`);
+    }
+    assertLiteral(transaction.status, MASUMI_TRANSACTION_STATUSES, `${label}.status`);
+    assertNullableLiteral(transaction.previousOnChainState, MASUMI_ON_CHAIN_STATES, `${label}.previousOnChainState`);
+    assertNullableLiteral(transaction.newOnChainState, MASUMI_ON_CHAIN_STATES, `${label}.newOnChainState`);
+    return transaction;
+}
+function narrowNullableTransaction(value, label) {
+    return value === null ? null : narrowTransaction(value, label);
+}
+function narrowNullableActionHistory(value, label) {
+    if (value === null)
+        return null;
+    if (!Array.isArray(value))
+        throwInvalidResponse(`${label} must be an array or null.`, value);
+    return value.map((entry, index) => {
+        const entryLabel = `${label}[${index}]`;
+        const action = narrowNextAction(entry, entryLabel);
+        assertRequiredString(action.id, `${entryLabel}.id`);
+        assertRequiredString(action.createdAt, `${entryLabel}.createdAt`);
+        assertRequiredString(action.updatedAt, `${entryLabel}.updatedAt`);
+        assertNullableString(action.submittedTxHash, `${entryLabel}.submittedTxHash`);
+        return action;
+    });
+}
+function narrowNullableTransactionHistory(value, label) {
+    if (value === null)
+        return null;
+    if (!Array.isArray(value))
+        throwInvalidResponse(`${label} must be an array or null.`, value);
+    return value.map((entry, index) => narrowTransaction(entry, `${label}[${index}]`));
 }
 function expectRecord(value, label) {
     if (!isRecord(value))
         throwInvalidResponse(`${label} must be a JSON object.`, value);
     return value;
 }
-function assertOptionalString(value, label) {
-    if (value !== undefined && typeof value !== "string") {
-        throwInvalidResponse(`${label} must be a string when provided.`, value);
+function assertRequiredString(value, label) {
+    if (typeof value !== "string")
+        throwInvalidResponse(`${label} must be a string.`, value);
+}
+function assertNullableString(value, label) {
+    if (value !== null && typeof value !== "string") {
+        throwInvalidResponse(`${label} must be a string or null.`, value);
     }
+}
+function assertRequiredNumber(value, label) {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+        throwInvalidResponse(`${label} must be a finite number.`, value);
+    }
+}
+function assertNullableNumber(value, label) {
+    if (value !== null)
+        assertRequiredNumber(value, label);
+}
+function assertLiteral(value, values, label) {
+    if (!values.some((candidate) => candidate === value)) {
+        throwInvalidResponse(`${label} is not a supported value.`, value);
+    }
+}
+function assertNullableLiteral(value, values, label) {
+    if (value !== null)
+        assertLiteral(value, values, label);
 }
 function throwInvalidResponse(message, payload) {
     throw new MasumiPaymentError(message, { code: "invalid_response", payload });

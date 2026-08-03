@@ -46,41 +46,107 @@ export type MasumiCreatePaymentRequestBody = {
     identifierFromPurchaser: string;
     RequestedFunds: MasumiAmount[];
 };
-export declare const MASUMI_ESCROW_STATES: readonly ["FundsLockingRequested", "FundsLocked", "ResultSubmitted", "Completed", "RefundRequested", "RefundAuthorized", "Disputed"];
-export type MasumiEscrowState = typeof MASUMI_ESCROW_STATES[number];
-export type MasumiPaymentRequestedAction = MasumiEscrowState | "SubmitResultRequested";
+export declare const MASUMI_PAYMENT_ACTIONS: readonly ["None", "Ignore", "WaitingForManualAction", "WaitingForExternalAction", "SubmitResultRequested", "SubmitResultInitiated", "WithdrawRequested", "WithdrawInitiated", "AuthorizeRefundRequested", "AuthorizeRefundInitiated"];
+export type MasumiPaymentAction = typeof MASUMI_PAYMENT_ACTIONS[number];
+export declare const MASUMI_ON_CHAIN_STATES: readonly ["FundsLocked", "FundsOrDatumInvalid", "ResultSubmitted", "RefundRequested", "Disputed", "WithdrawAuthorized", "RefundAuthorized", "Withdrawn", "RefundWithdrawn", "DisputedWithdrawn"];
+export type MasumiOnChainState = typeof MASUMI_ON_CHAIN_STATES[number];
+/** @deprecated Use MASUMI_ON_CHAIN_STATES. */
+export declare const MASUMI_ESCROW_STATES: readonly ["FundsLocked", "FundsOrDatumInvalid", "ResultSubmitted", "RefundRequested", "Disputed", "WithdrawAuthorized", "RefundAuthorized", "Withdrawn", "RefundWithdrawn", "DisputedWithdrawn"];
+/** @deprecated Use MasumiOnChainState. */
+export type MasumiEscrowState = MasumiOnChainState;
+export declare const MASUMI_PAYMENT_ERROR_TYPES: readonly ["NetworkError", "Unknown"];
+export type MasumiPaymentErrorType = typeof MASUMI_PAYMENT_ERROR_TYPES[number];
+export declare const MASUMI_PAYMENT_SOURCE_TYPES: readonly ["Web3CardanoV1", "Web3CardanoV2"];
+export type MasumiPaymentSourceType = typeof MASUMI_PAYMENT_SOURCE_TYPES[number];
+export declare const MASUMI_PRICING_TYPES: readonly ["Fixed", "Free", "Dynamic"];
+export type MasumiPricingType = typeof MASUMI_PRICING_TYPES[number];
+export declare const MASUMI_TRANSACTION_STATUSES: readonly ["Pending", "Confirmed", "FailedViaTimeout", "FailedViaManualReset", "RolledBack"];
+export type MasumiTransactionStatus = typeof MASUMI_TRANSACTION_STATUSES[number];
+/** @deprecated Use MasumiPaymentAction. */
+export type MasumiPaymentRequestedAction = MasumiPaymentAction;
 export type MasumiPaymentNextAction = {
-    requestedAction?: MasumiPaymentRequestedAction | null;
-    errorType?: string | null;
-    errorNote?: string | null;
+    requestedAction: MasumiPaymentAction;
+    errorType: MasumiPaymentErrorType | null;
+    errorNote: string | null;
+    resultHash: string | null;
 } & Record<string, unknown>;
 export type MasumiPaymentSource = {
-    network?: MasumiNetwork;
-    smartContractAddress?: string;
-    policyId?: string | null;
+    id: string;
+    network: MasumiNetwork;
+    paymentSourceType: MasumiPaymentSourceType;
+    smartContractAddress: string;
+    policyId: string | null;
+} & Record<string, unknown>;
+export type MasumiBuyerWallet = {
+    id: string;
+    walletVkey: string;
 } & Record<string, unknown>;
 export type MasumiWallet = {
-    walletVkey?: string | null;
+    id: string;
+    walletVkey: string;
+    walletAddress: string;
 } & Record<string, unknown>;
-export type MasumiPayment = {
-    id?: string;
-    blockchainIdentifier?: string;
-    agentIdentifier?: string;
-    payByTime?: string;
-    submitResultTime?: string;
-    unlockTime?: string;
-    externalDisputeUnlockTime?: string;
-    inputHash?: string;
-    identifierFromPurchaser?: string;
-    RequestedFunds?: MasumiAmount[];
-    Amounts?: MasumiAmount[];
-    PaymentSource?: MasumiPaymentSource;
-    SmartContractWallet?: MasumiWallet;
-    SellerWallet?: MasumiWallet;
-    NextAction?: MasumiPaymentNextAction;
-    onChainState?: MasumiEscrowState | null;
+export type MasumiPaymentActionHistoryEntry = MasumiPaymentNextAction & {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    submittedTxHash: string | null;
+};
+export type MasumiPaymentTransaction = {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    fees: string | null;
+    blockHeight: number | null;
+    blockTime: number | null;
+    txHash: string | null;
+    status: MasumiTransactionStatus;
+    previousOnChainState: MasumiOnChainState | null;
+    newOnChainState: MasumiOnChainState | null;
+    confirmations: number | null;
 } & Record<string, unknown>;
-export type MasumiCreatePaymentResult = MasumiPayment & {
+export type MasumiPaymentDetails = {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    blockchainIdentifier: string;
+    agentIdentifier: string | null;
+    agentName: string | null;
+    pricingType: MasumiPricingType;
+    lastCheckedAt: string | null;
+    payByTime: string | null;
+    submitResultTime: string;
+    unlockTime: string;
+    collateralReturnLovelace: string | null;
+    buyerReturnAddress: string | null;
+    sellerReturnAddress: string | null;
+    externalDisputeUnlockTime: string;
+    requestedById: string;
+    resultHash: string | null;
+    nextActionLastChangedAt: string;
+    onChainStateOrResultLastChangedAt: string;
+    nextActionOrOnChainStateOrResultLastChangedAt: string;
+    inputHash: string | null;
+    totalBuyerCardanoFees: number;
+    totalSellerCardanoFees: number;
+    cooldownTime: number;
+    cooldownTimeOtherParty: number;
+    onChainState: MasumiOnChainState | null;
+    NextAction: MasumiPaymentNextAction;
+    CurrentTransaction: MasumiPaymentTransaction | null;
+    RequestedFunds: MasumiAmount[];
+    WithdrawnForSeller: MasumiAmount[];
+    WithdrawnForBuyer: MasumiAmount[];
+    PaymentSource: MasumiPaymentSource;
+    BuyerWallet: MasumiBuyerWallet | null;
+    SmartContractWallet: MasumiWallet | null;
+    metadata: string | null;
+} & Record<string, unknown>;
+export type MasumiPayment = MasumiPaymentDetails & {
+    ActionHistory: MasumiPaymentActionHistoryEntry[] | null;
+    TransactionHistory: MasumiPaymentTransaction[] | null;
+};
+export type MasumiCreatePaymentResult = MasumiPaymentDetails & {
     requestBody: MasumiCreatePaymentRequestBody;
     costCents: string;
     amountRawUnits: string;
@@ -93,7 +159,7 @@ export type MasumiListPaymentsInput = {
     includeHistory?: boolean;
 };
 export type MasumiListPaymentsPage = Record<string, unknown> & {
-    Payments?: MasumiPayment[];
+    Payments: MasumiPayment[];
 };
 export type MasumiListPaymentsResult = MasumiListPaymentsPage | MasumiPayment[];
 type MasumiSubmitResultHash = {
@@ -160,9 +226,24 @@ export type SokosumiMasumiPaymentPayload = {
         policyId: string | null;
     };
 };
-export declare function createSokosumiMasumiPaymentPayload(payment?: (MasumiPayment & {
+export type SokosumiMasumiPaymentPayloadInput = Record<string, unknown> & {
+    id?: string;
+    blockchainIdentifier?: string;
+    agentIdentifier?: string | null;
+    payByTime?: string | null;
+    submitResultTime?: string;
+    unlockTime?: string;
+    externalDisputeUnlockTime?: string;
+    inputHash?: string | null;
     requestBody?: Partial<MasumiCreatePaymentRequestBody>;
-})): SokosumiMasumiPaymentPayload;
+    identifierFromPurchaser?: string;
+    RequestedFunds?: MasumiAmount[];
+    Amounts?: MasumiAmount[];
+    PaymentSource?: Partial<MasumiPaymentSource>;
+    SmartContractWallet?: Partial<MasumiWallet> | null;
+    SellerWallet?: Partial<MasumiWallet> | null;
+};
+export declare function createSokosumiMasumiPaymentPayload(payment?: SokosumiMasumiPaymentPayloadInput): SokosumiMasumiPaymentPayload;
 export declare function canonicalJson(value: unknown): string;
 export declare function sha256Hex(value: unknown): string;
 export declare function usdToMasumiCostCents(value: number | string): bigint;

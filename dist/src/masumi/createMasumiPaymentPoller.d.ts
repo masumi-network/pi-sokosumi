@@ -1,8 +1,25 @@
 import type { SokosumiLogger } from "../sharedTypes.js";
-import type { MasumiListPaymentsInput, MasumiListPaymentsResult, MasumiPayment, MasumiSubmitResultInput, MasumiSubmitResultResponse } from "./masumiPaymentClient.js";
+import type { MasumiListPaymentsInput, MasumiNetwork, MasumiOnChainState, MasumiPaymentAction, MasumiPaymentErrorType, MasumiSubmitResultInput, MasumiSubmitResultResponse } from "./masumiPaymentClient.js";
 import type { ListPendingMasumiPaymentsInput, MarkMasumiDroppedInput, MarkMasumiSubmittedInput, MasumiPendingPaymentRecord } from "./masumiPaymentStore.js";
+export type MasumiPaymentPollerPayment = Record<string, unknown> & {
+    blockchainIdentifier: string;
+    NextAction?: Record<string, unknown> & {
+        requestedAction?: MasumiPaymentAction | null;
+        errorType?: MasumiPaymentErrorType | null;
+        errorNote?: string | null;
+        resultHash?: string | null;
+    };
+    onChainState?: MasumiOnChainState | null;
+    PaymentSource?: Record<string, unknown> & {
+        network?: MasumiNetwork;
+    };
+};
+export type MasumiPaymentPollerListPage = Record<string, unknown> & {
+    Payments?: MasumiPaymentPollerPayment[];
+};
+export type MasumiPaymentPollerListResult = MasumiPaymentPollerListPage | MasumiPaymentPollerPayment[];
 export type MasumiPaymentPollerClient = {
-    listPayments(input?: MasumiListPaymentsInput): Promise<MasumiListPaymentsResult>;
+    listPayments(input?: MasumiListPaymentsInput): Promise<MasumiPaymentPollerListResult>;
     submitResult(input: MasumiSubmitResultInput): Promise<MasumiSubmitResultResponse>;
 };
 export type MasumiPaymentPollerStore<TRecord extends MasumiPendingPaymentRecord = MasumiPendingPaymentRecord> = {
@@ -33,4 +50,4 @@ export type MasumiPaymentPoller = {
     tick(): Promise<void>;
 };
 export declare function createMasumiPaymentPoller<TRecord extends MasumiPendingPaymentRecord = MasumiPendingPaymentRecord>(options: MasumiPaymentPollerOptions<TRecord>): MasumiPaymentPoller;
-export declare function isReadyForSubmitResult(payment: MasumiPayment): boolean;
+export declare function isReadyForSubmitResult(payment: MasumiPaymentPollerPayment): boolean;

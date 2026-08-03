@@ -45,8 +45,12 @@ export type MasumiCompletionCostResult =
 
 export type MasumiCompletionTaskEvent<TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput> =
   TTaskEvent & {
-    masumiPayment?: SokosumiMasumiPaymentPayload;
+    masumiPayment: SokosumiMasumiPaymentPayload;
   };
+
+export type MasumiCompletionBeforeHookResult<
+  TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput
+> = TTaskEvent | MasumiCompletionTaskEvent<TTaskEvent>;
 
 export type MasumiCompletionHooksOptions<
   TEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
@@ -79,12 +83,12 @@ export type MasumiCompletionHooks<
 > = {
   beforeTaskEventCreated(
     input: SokosumiBeforeTaskEventCreatedInput<TEvent, TTask, TTaskEvent>
-  ): Promise<MasumiCompletionTaskEvent<TTaskEvent>>;
+  ): Promise<MasumiCompletionBeforeHookResult<TTaskEvent>>;
   afterTaskEventCreated(
     input: SokosumiAfterTaskEventCreatedInput<
       TEvent,
       TTask,
-      MasumiCompletionTaskEvent<TTaskEvent>,
+      MasumiCompletionBeforeHookResult<TTaskEvent>,
       TCreatedTaskEvent
     >
   ): Promise<TRecord | undefined>;
@@ -113,7 +117,6 @@ export function createMasumiCompletionHooks<
   return {
     async beforeTaskEventCreated(input) {
       const taskEvent = input.taskEvent;
-      assertMasumiCompatibleTaskEvent(taskEvent);
       if (!enabled || !masumiClient) return taskEvent;
       if (!isCompletedTaskEvent(taskEvent) || taskEvent.masumiPayment) return taskEvent;
 
@@ -153,8 +156,10 @@ export function createMasumiCompletionHooks<
 
     async afterTaskEventCreated(input) {
       const taskEvent = input.taskEvent;
-      const masumiPayment = taskEvent.masumiPayment;
-      if (!enabled || !masumiPayment) return undefined;
+      const payment = taskEvent.masumiPayment;
+      if (!enabled || !payment) return undefined;
+      assertSokosumiMasumiPaymentPayload(payment);
+      const masumiPayment = payment;
       if (!store?.recordPendingMasumiPayment) {
         log(logger, "masumi_pending_payment_store_unavailable", {
           taskId: input.taskId || input.task?.id || input.event?.taskId || "",
@@ -234,11 +239,9 @@ function metadataCredits(value: unknown): unknown {
   return isRecord(value) ? value.credits : undefined;
 }
 
-function assertMasumiCompatibleTaskEvent<TTaskEvent extends SokosumiTaskEventInput>(
-  taskEvent: TTaskEvent
-): asserts taskEvent is MasumiCompletionTaskEvent<TTaskEvent> {
-  const payment = taskEvent.masumiPayment;
-  if (payment === undefined || payment === null) return;
+function assertSokosumiMasumiPaymentPayload(
+  payment: unknown
+): asserts payment is SokosumiMasumiPaymentPayload {
   if (
     !isRecord(payment) ||
     typeof payment.id !== "string" ||

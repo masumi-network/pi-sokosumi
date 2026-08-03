@@ -102,7 +102,13 @@ import {
   MASUMI_DEFAULT_SUBMIT_RESULT_MS,
   MASUMI_ESCROW_STATES,
   MASUMI_NETWORKS,
+  MASUMI_ON_CHAIN_STATES,
+  MASUMI_PAYMENT_ACTIONS,
+  MASUMI_PAYMENT_ERROR_TYPES,
+  MASUMI_PAYMENT_SOURCE_TYPES,
   MASUMI_PAYMENT_SUBMIT_STATUSES,
+  MASUMI_PRICING_TYPES,
+  MASUMI_TRANSACTION_STATUSES,
   MASUMI_USDM_UNITS,
   MasumiPaymentError,
   canonicalJson,
@@ -333,7 +339,10 @@ const normalizeChatInput: NormalizePiAgentChatRequestInput = {
 };
 const chatRequest: PiAgentChatRequest = normalizePiAgentChatRequest(normalizeChatInput);
 type CustomChatRequest = PiAgentChatRequest & { correlationId: string };
-type CustomChatResult = { ok: true; correlationId: string };
+interface CustomChatResult {
+  ok: true;
+  correlationId: string;
+}
 const chatRouteOptions: PiAgentChatRouteOptions<CustomChatRequest, CustomChatResult> = {
   path: "/chat",
   maxBodyBytes: 1024,
@@ -361,7 +370,7 @@ const chatServerOptions: PiAgentChatServerOptions<CustomChatRequest, CustomChatR
   port: 0,
   host: "127.0.0.1",
   healthPath: "/healthz",
-  healthResponse: () => ({ status: "ok" }),
+  healthResponse: () => new Date(),
   logger: console
 };
 const chatServer = startPiAgentChatServer(chatServerOptions);
@@ -459,9 +468,19 @@ const workerOptions: SokosumiAgentWorkerOptions<ApplicationTaskContext, Applicat
   },
   createStaleInputRequiredEvent: ({ inputRequiredEvent, client }) => {
     void client;
-    return { status: "COMPLETED", origin: "SOKOSUMI", comment: inputRequiredEvent.id };
+    return {
+      status: "COMPLETED",
+      origin: "SOKOSUMI",
+      comment: inputRequiredEvent.id,
+      handlerResult: { provider: "application", value: 0 }
+    };
   },
-  beforeTaskEventCreated: ({ taskEvent, client }) => { void client; return taskEvent; },
+  beforeTaskEventCreated: ({ taskEvent, client }) => {
+    void client;
+    const provider: "application" = taskEvent.handlerResult.provider;
+    void provider;
+    return taskEvent;
+  },
   afterTaskEventCreated: ({ createdTaskEvent, client }) => { void createdTaskEvent; void client; }
 };
 const workerRuntime = startSokosumiAgentWorker(workerOptions);
@@ -476,6 +495,51 @@ const invalidWorkerOptions: SokosumiAgentWorkerOptions<ApplicationTaskContext, A
   })
 };
 void invalidWorkerOptions;
+type ApplicationCreatedTaskEvent = SokosumiTaskEvent & { receiptId: string };
+type ApplicationWorkerClient = SokosumiTaskPollerClient<
+  SokosumiTaskEvent,
+  SokosumiTaskSnapshot,
+  ApplicationCreatedTaskEvent
+> & {
+  getApplicationReceipt(taskId: string): Promise<string>;
+};
+declare const applicationWorkerClient: ApplicationWorkerClient;
+const applicationClientWorkerOptions: SokosumiAgentWorkerOptions<
+  SokosumiTaskContext,
+  ApplicationHandlerResult,
+  ApplicationWorkerClient
+> = {
+  enabled: true,
+  client: applicationWorkerClient,
+  createTaskHandler: () => ({
+    status: "COMPLETED",
+    origin: "SOKOSUMI",
+    handlerResult: { provider: "application", value: 1 }
+  }),
+  beforeTaskEventCreated: ({ taskEvent, client }) => {
+    void client.getApplicationReceipt("task-1");
+    void taskEvent.handlerResult.value;
+    return taskEvent;
+  },
+  afterTaskEventCreated: ({ createdTaskEvent }) => {
+    const receiptId: string = createdTaskEvent.receiptId;
+    void receiptId;
+  }
+};
+void startSokosumiAgentWorker(applicationClientWorkerOptions);
+// @ts-expect-error worker client extensions require an explicit compatible client
+const invalidApplicationClientWorkerOptions: SokosumiAgentWorkerOptions<
+  SokosumiTaskContext,
+  SokosumiTaskEventInput,
+  ApplicationWorkerClient
+> = { enabled: true };
+void invalidApplicationClientWorkerOptions;
+// @ts-expect-error custom worker client generics cannot fall back to the built-in HTTP client
+startSokosumiAgentWorker<
+  SokosumiTaskContext,
+  SokosumiTaskEventInput,
+  ApplicationWorkerClient
+>();
 const completionHandler = createSokosumiTaskCompletionHandler({
   client: httpClient,
   resolveTaskContext: () => ({ applicationTaskId: "application-task-1" }),
@@ -543,6 +607,12 @@ const paymentError = new MasumiPaymentError("bad response", { code: "http_error"
 void paymentError;
 void MASUMI_NETWORKS;
 void MASUMI_ESCROW_STATES;
+void MASUMI_ON_CHAIN_STATES;
+void MASUMI_PAYMENT_ACTIONS;
+void MASUMI_PAYMENT_ERROR_TYPES;
+void MASUMI_PAYMENT_SOURCE_TYPES;
+void MASUMI_PRICING_TYPES;
+void MASUMI_TRANSACTION_STATUSES;
 void MASUMI_CENT_RAW_UNITS;
 void MASUMI_PAYMENT_SUBMIT_STATUSES;
 void MASUMI_DEFAULT_PAY_BY_MS;
@@ -638,11 +708,70 @@ void paymentPoller.tick();
 const disabledPaymentPollerOptions: MasumiPaymentPollerOptions = { enabled: false, logger: console };
 void createMasumiPaymentPoller(disabledPaymentPollerOptions);
 const payment: MasumiPayment = {
+  id: "payment-1",
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
   blockchainIdentifier: "blockchain-1",
+  agentIdentifier: null,
+  agentName: null,
+  pricingType: "Fixed",
+  lastCheckedAt: null,
+  payByTime: null,
+  submitResultTime: "1750000000000",
+  unlockTime: "1750003600000",
+  collateralReturnLovelace: null,
+  buyerReturnAddress: null,
+  sellerReturnAddress: null,
+  externalDisputeUnlockTime: "1750007200000",
+  requestedById: "api-key-1",
+  resultHash: null,
+  nextActionLastChangedAt: new Date().toISOString(),
+  onChainStateOrResultLastChangedAt: new Date().toISOString(),
+  nextActionOrOnChainStateOrResultLastChangedAt: new Date().toISOString(),
+  inputHash: null,
+  totalBuyerCardanoFees: 0,
+  totalSellerCardanoFees: 0,
+  cooldownTime: 0,
+  cooldownTimeOtherParty: 0,
   onChainState: "FundsLocked",
-  NextAction: { requestedAction: "SubmitResultRequested", errorType: null }
+  NextAction: {
+    requestedAction: "SubmitResultRequested",
+    errorType: null,
+    errorNote: null,
+    resultHash: null
+  },
+  ActionHistory: null,
+  CurrentTransaction: null,
+  TransactionHistory: null,
+  RequestedFunds: [{ amount: "30000", unit: "unit" }],
+  WithdrawnForSeller: [],
+  WithdrawnForBuyer: [],
+  PaymentSource: {
+    id: "source-1",
+    network: "Preprod",
+    paymentSourceType: "Web3CardanoV1",
+    smartContractAddress: "addr_test_contract",
+    policyId: null
+  },
+  BuyerWallet: null,
+  SmartContractWallet: null,
+  metadata: null
 };
 void isReadyForSubmitResult(payment);
+const invalidPaymentAction: MasumiPayment["NextAction"] = {
+  // @ts-expect-error on-chain states are not requested payment actions
+  requestedAction: "FundsLocked",
+  errorType: null,
+  errorNote: null,
+  resultHash: null
+};
+void invalidPaymentAction;
+const invalidOnChainPayment: MasumiPayment = {
+  ...payment,
+  // @ts-expect-error requested actions are not on-chain states
+  onChainState: "WaitingForExternalAction"
+};
+void invalidOnChainPayment;
 
 void createSokosumiTaskPoller({
   client: httpClient,

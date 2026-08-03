@@ -1,4 +1,9 @@
-import { isRecord } from "../sharedTypes.js";
+import {
+  getPathValue as path,
+  getProperty as property,
+  getRecordProperty as recordProperty,
+  isRecord
+} from "../sharedTypes.js";
 
 const ID_KEYS = ["sokosumiUserId", "sokosumi_user_id", "userId", "user_id", "createdById", "ownerId", "customerId", "sub"] as const;
 const HEADER_USER_ID_KEYS = [
@@ -287,27 +292,6 @@ function getMessageIdentityCandidates(message: unknown): Record<string, unknown>
 function normalizeHeaderValue(value: unknown): string {
   if (Array.isArray(value)) return firstString(...value);
   return firstString(value);
-}
-
-function property(source: Record<string, unknown> | undefined, key: string): unknown {
-  return source?.[key];
-}
-
-function recordProperty(
-  source: Record<string, unknown> | undefined,
-  key: string
-): Record<string, unknown> | undefined {
-  const value = property(source, key);
-  return isRecord(value) ? value : undefined;
-}
-
-function path(source: Record<string, unknown> | undefined, ...keys: string[]): unknown {
-  let value: unknown = source;
-  for (const key of keys) {
-    if (!isRecord(value)) return undefined;
-    value = value[key];
-  }
-  return value;
 }
 
 function firstString(...values: unknown[]): string {

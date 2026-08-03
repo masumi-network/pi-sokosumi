@@ -2,8 +2,10 @@ import type { SokosumiLogger } from "../sharedTypes.js";
 import { getErrorMessage } from "../sharedTypes.js";
 import type {
   MasumiListPaymentsInput,
-  MasumiListPaymentsResult,
-  MasumiPayment,
+  MasumiNetwork,
+  MasumiOnChainState,
+  MasumiPaymentAction,
+  MasumiPaymentErrorType,
   MasumiSubmitResultInput,
   MasumiSubmitResultResponse
 } from "./masumiPaymentClient.js";
@@ -14,8 +16,28 @@ import type {
   MasumiPendingPaymentRecord
 } from "./masumiPaymentStore.js";
 
+export type MasumiPaymentPollerPayment = Record<string, unknown> & {
+  blockchainIdentifier: string;
+  NextAction?: Record<string, unknown> & {
+    requestedAction?: MasumiPaymentAction | null;
+    errorType?: MasumiPaymentErrorType | null;
+    errorNote?: string | null;
+    resultHash?: string | null;
+  };
+  onChainState?: MasumiOnChainState | null;
+  PaymentSource?: Record<string, unknown> & {
+    network?: MasumiNetwork;
+  };
+};
+
+export type MasumiPaymentPollerListPage = Record<string, unknown> & {
+  Payments?: MasumiPaymentPollerPayment[];
+};
+
+export type MasumiPaymentPollerListResult = MasumiPaymentPollerListPage | MasumiPaymentPollerPayment[];
+
 export type MasumiPaymentPollerClient = {
-  listPayments(input?: MasumiListPaymentsInput): Promise<MasumiListPaymentsResult>;
+  listPayments(input?: MasumiListPaymentsInput): Promise<MasumiPaymentPollerListResult>;
   submitResult(input: MasumiSubmitResultInput): Promise<MasumiSubmitResultResponse>;
 };
 
@@ -194,7 +216,7 @@ export function createMasumiPaymentPoller<TRecord extends MasumiPendingPaymentRe
     });
   }
 
-  async function findPayment(record: TRecord): Promise<MasumiPayment | undefined> {
+  async function findPayment(record: TRecord): Promise<MasumiPaymentPollerPayment | undefined> {
     const result = await client!.listPayments({
       limit: 100,
       network: record.network || undefined
@@ -204,7 +226,7 @@ export function createMasumiPaymentPoller<TRecord extends MasumiPendingPaymentRe
   }
 }
 
-export function isReadyForSubmitResult(payment: MasumiPayment): boolean {
+export function isReadyForSubmitResult(payment: MasumiPaymentPollerPayment): boolean {
   return payment.NextAction?.requestedAction === "SubmitResultRequested" || payment.onChainState === "FundsLocked";
 }
 

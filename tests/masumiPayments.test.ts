@@ -27,9 +27,10 @@ test("Masumi payment client creates dynamic cent-denominated payments", async ()
       });
       return jsonResponse({
         status: "success",
-        data: {
+        data: masumiPaymentResponse({
           id: "payment-1",
           blockchainIdentifier: "blockchain-1",
+          agentIdentifier: null,
           payByTime: "2026-06-05T02:00:00.000Z",
           submitResultTime: "2026-06-05T03:00:00.000Z",
           unlockTime: "2026-06-05T09:00:00.000Z",
@@ -41,14 +42,18 @@ test("Masumi payment client creates dynamic cent-denominated payments", async ()
             }
           ],
           PaymentSource: {
+            id: "source-1",
             network: "Preprod",
+            paymentSourceType: "Web3CardanoV1",
             smartContractAddress: "addr_test_contract",
             policyId: "policy"
           },
           SmartContractWallet: {
-            walletVkey: "seller-vkey"
+            id: "wallet-1",
+            walletVkey: "seller-vkey",
+            walletAddress: "addr_test_seller"
           }
-        }
+        })
       });
     }
   });
@@ -78,6 +83,9 @@ test("Masumi payment client creates dynamic cent-denominated payments", async ()
   assert.equal(JSON.parse(requests[0].body.metadata).credits, 3);
   assert.equal(JSON.parse(requests[0].body.metadata).reason, "unit-test");
   assert.equal(payment.requestBody.RequestedFunds[0].amount, "30000");
+  assert.equal(payment.agentIdentifier, null);
+  assert.equal(payment.inputHash, null);
+  assert.equal(payment.NextAction.requestedAction, "WaitingForExternalAction");
 });
 
 test("Masumi raw unit conversion follows the charged Sokosumi credits", async () => {
@@ -99,12 +107,18 @@ test("Masumi raw unit conversion follows the charged Sokosumi credits", async ()
       });
       return jsonResponse({
         status: "success",
-        data: {
+        data: masumiPaymentResponse({
           id: "payment-credits",
           blockchainIdentifier: "blockchain-credits",
           RequestedFunds: [{ amount: "20800", unit: "unit" }],
-          PaymentSource: { network: "Mainnet" }
-        }
+          PaymentSource: {
+            id: "source-mainnet",
+            network: "Mainnet",
+            paymentSourceType: "Web3CardanoV1",
+            smartContractAddress: "addr_mainnet_contract",
+            policyId: null
+          }
+        })
       });
     }
   });
@@ -120,6 +134,22 @@ test("Masumi raw unit conversion follows the charged Sokosumi credits", async ()
   assert.equal(payment.amountRawUnits, "20800");
 });
 
+test("Masumi payment client rejects incomplete external payment objects", async () => {
+  const client = createMasumiPaymentClient({
+    apiUrl: "https://masumi.example.test/api/v1",
+    apiToken: "payment-token",
+    agentIdentifier: "agent1",
+    async fetchImpl() {
+      return jsonResponse({ status: "success", data: {} });
+    }
+  });
+
+  await assert.rejects(
+    () => client.createPayment({ taskId: "task-invalid", costCents: 1 }),
+    (error) => error?.code === "invalid_response" && /\.id must be a string/.test(error.message)
+  );
+});
+
 test("Masumi completion hooks attach payment data and persist exact payload hash after Sokosumi accepts it", async () => {
   const store = createMemoryMasumiPaymentStore();
   const hooks = createMasumiCompletionHooks({
@@ -128,15 +158,28 @@ test("Masumi completion hooks attach payment data and persist exact payload hash
         assert.equal(input.taskId, "task-hook");
         assert.equal(input.costCents.toString(), "3");
         return {
-          id: "payment-hook",
-          blockchainIdentifier: "blockchain-hook",
-          payByTime: "2026-06-05T02:00:00.000Z",
-          submitResultTime: "2026-06-05T03:00:00.000Z",
-          unlockTime: "2026-06-05T09:00:00.000Z",
-          externalDisputeUnlockTime: "2026-06-05T15:00:00.000Z",
-          RequestedFunds: [{ amount: "30000", unit: "unit" }],
-          PaymentSource: { network: "Preprod", smartContractAddress: "addr", policyId: "policy" },
-          SmartContractWallet: { walletVkey: "seller-vkey" },
+          ...masumiPaymentResponse({
+            id: "payment-hook",
+            blockchainIdentifier: "blockchain-hook",
+            agentIdentifier: "agent-hook",
+            payByTime: "2026-06-05T02:00:00.000Z",
+            submitResultTime: "2026-06-05T03:00:00.000Z",
+            unlockTime: "2026-06-05T09:00:00.000Z",
+            externalDisputeUnlockTime: "2026-06-05T15:00:00.000Z",
+            RequestedFunds: [{ amount: "30000", unit: "unit" }],
+            PaymentSource: {
+              id: "source-hook",
+              network: "Preprod",
+              paymentSourceType: "Web3CardanoV1",
+              smartContractAddress: "addr",
+              policyId: "policy"
+            },
+            SmartContractWallet: {
+              id: "wallet-hook",
+              walletVkey: "seller-vkey",
+              walletAddress: "addr_test_seller"
+            }
+          }),
           requestBody: {
             agentIdentifier: "agent-hook",
             inputHash: "abc123",
@@ -184,6 +227,35 @@ test("Masumi completion hooks attach payment data and persist exact payload hash
   assert.deepEqual(pending[0].completionPayload, taskEvent);
 });
 
+test("disabled and unconfigured Masumi completion hooks preserve existing task events", async () => {
+  const taskEvent = {
+    status: "COMPLETED",
+    origin: "SOKOSUMI",
+    masumiPayment: { legacy: true }
+  };
+  const input = {
+    taskId: "task-noop",
+    task: { id: "task-noop" },
+    event: { id: "event-noop", taskId: "task-noop" },
+    taskEvent
+  };
+
+  assert.equal(
+    await createMasumiCompletionHooks({ enabled: false }).beforeTaskEventCreated(input),
+    taskEvent
+  );
+  assert.equal(
+    await createMasumiCompletionHooks().beforeTaskEventCreated(input),
+    taskEvent
+  );
+  assert.equal(
+    await createMasumiCompletionHooks({
+      masumiClient: { createPayment: async () => { throw new Error("should not create"); } }
+    }).beforeTaskEventCreated(input),
+    taskEvent
+  );
+});
+
 test("Masumi payment poller submits results when funds are locked", async () => {
   const store = createMemoryMasumiPaymentStore();
   await store.recordPendingMasumiPayment({
@@ -210,7 +282,7 @@ test("Masumi payment poller submits results when funds are locked", async () => 
               blockchainIdentifier: "blockchain-submit",
               onChainState: "FundsLocked",
               NextAction: {
-                requestedAction: "FundsLocked",
+                requestedAction: "SubmitResultRequested",
                 errorType: null
               },
               PaymentSource: {
@@ -266,7 +338,7 @@ test("Masumi payment poller drops errored payments", async () => {
               blockchainIdentifier: "blockchain-drop",
               NextAction: {
                 requestedAction: "SubmitResultRequested",
-                errorType: "PaymentExpired",
+                errorType: "Unknown",
                 errorNote: "payByTime passed"
               }
             }
@@ -293,5 +365,59 @@ function jsonResponse(payload: unknown, status = 200) {
     async text() {
       return JSON.stringify(payload);
     }
+  };
+}
+
+function masumiPaymentResponse(overrides = {}) {
+  return {
+    id: "payment-default",
+    createdAt: "2026-06-04T10:00:00.000Z",
+    updatedAt: "2026-06-04T10:00:00.000Z",
+    blockchainIdentifier: "blockchain-default",
+    agentIdentifier: null,
+    agentName: null,
+    pricingType: "Fixed",
+    lastCheckedAt: null,
+    payByTime: null,
+    submitResultTime: "2026-06-05T03:00:00.000Z",
+    unlockTime: "2026-06-05T09:00:00.000Z",
+    collateralReturnLovelace: null,
+    buyerReturnAddress: null,
+    sellerReturnAddress: null,
+    externalDisputeUnlockTime: "2026-06-05T15:00:00.000Z",
+    requestedById: "api-key-1",
+    resultHash: null,
+    nextActionLastChangedAt: "2026-06-04T10:00:00.000Z",
+    onChainStateOrResultLastChangedAt: "2026-06-04T10:00:00.000Z",
+    nextActionOrOnChainStateOrResultLastChangedAt: "2026-06-04T10:00:00.000Z",
+    inputHash: null,
+    totalBuyerCardanoFees: 0,
+    totalSellerCardanoFees: 0,
+    cooldownTime: 0,
+    cooldownTimeOtherParty: 0,
+    onChainState: null,
+    NextAction: {
+      requestedAction: "WaitingForExternalAction",
+      errorType: null,
+      errorNote: null,
+      resultHash: null
+    },
+    ActionHistory: null,
+    CurrentTransaction: null,
+    TransactionHistory: null,
+    RequestedFunds: [{ amount: "10000", unit: "unit" }],
+    WithdrawnForSeller: [],
+    WithdrawnForBuyer: [],
+    PaymentSource: {
+      id: "source-default",
+      network: "Preprod",
+      paymentSourceType: "Web3CardanoV1",
+      smartContractAddress: "addr_test_contract",
+      policyId: null
+    },
+    BuyerWallet: null,
+    SmartContractWallet: null,
+    metadata: null,
+    ...overrides
   };
 }

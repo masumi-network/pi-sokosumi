@@ -21,9 +21,14 @@ export function startSokosumiAgentWorker({ enabled, apiUrl, apiKey, intervalMs =
             resolveTaskContext,
             createTaskHandler
         })
-        : ({ task }) => createBootstrapCompletedEvent({ task, bootstrapComment });
+        : ({ task }) => {
+            // The conditional worker option only permits this fallback when the base event satisfies TTaskEvent.
+            return createBootstrapCompletedEvent({ task, bootstrapComment });
+        };
     const poller = createSokosumiTaskPoller({
-        client,
+        // ReturnType<TClient["createTaskEvent"]> is the created-event type, but TypeScript cannot
+        // prove that relationship through the generic port; the runtime method check above protects it.
+        client: client,
         intervalMs,
         limit,
         maxPages,
@@ -67,6 +72,8 @@ function resolveWorkerClient(providedClient, options) {
         typeof client.createTaskEvent !== "function") {
         throw new Error("Sokosumi worker client must implement listCoworkerEvents, getTask, and createTaskEvent.");
     }
+    // SokosumiAgentWorkerClientOption requires custom client extensions explicitly;
+    // when omitted, its conditional contract proves the HTTP client is assignable to TClient.
     return client;
 }
 export function createSokosumiTaskCompletionHandler({ client, logger = console, createTrace, resolveTaskContext, createTaskHandler }) {

@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders, IncomingMessage, Server, ServerResponse } from "node:http";
-import type { Awaitable, JsonValue } from "../sharedTypes.js";
+import type { Awaitable } from "../sharedTypes.js";
 export type PiAgentChatRequest = {
     agentId?: string;
     surface: string;
@@ -9,7 +9,7 @@ export type PiAgentChatRequest = {
     attachments?: unknown[];
     metadata?: Record<string, unknown>;
 };
-export type PiAgentChatHandlerResult = JsonValue;
+export type PiAgentChatHandlerResult = unknown;
 export type PiAgentSupportedSurfaces = readonly string[] | Record<string, readonly string[]>;
 export type NormalizePiAgentChatRequestInput = {
     body?: unknown;
@@ -47,7 +47,7 @@ type PiAgentChatRequestNormalizer<TRequest> = PiAgentChatRequest extends TReques
 } : {
     normalizeRequest: (input: NormalizePiAgentChatRouteRequestInput) => Awaitable<TRequest>;
 };
-export type PiAgentChatRouteOptions<TRequest = PiAgentChatRequest, TResult extends PiAgentChatHandlerResult = PiAgentChatHandlerResult> = {
+export type PiAgentChatRouteOptions<TRequest = PiAgentChatRequest, TResult = PiAgentChatHandlerResult> = {
     path?: string;
     maxBodyBytes?: number;
     defaultAgentId?: string;
@@ -59,7 +59,7 @@ export type PiAgentChatRouteOptions<TRequest = PiAgentChatRequest, TResult exten
     handleChat: (input: PiAgentChatHandlerInput<TRequest>) => Awaitable<TResult>;
     onError?: (input: PiAgentChatErrorHandlerInput) => Awaitable<void>;
 } & PiAgentChatRequestNormalizer<TRequest>;
-export type PiAgentChatServerOptions<TRequest = PiAgentChatRequest, TResult extends PiAgentChatHandlerResult = PiAgentChatHandlerResult> = PiAgentChatRouteOptions<TRequest, TResult> & {
+export type PiAgentChatServerOptions<TRequest = PiAgentChatRequest, TResult = PiAgentChatHandlerResult> = PiAgentChatRouteOptions<TRequest, TResult> & {
     port?: number;
     host?: string;
     healthPath?: string;
@@ -71,8 +71,8 @@ export declare class PiAgentChatRequestError extends Error {
     constructor(message: string, statusCode?: number);
 }
 export declare function normalizePiAgentChatRequest({ body, headers, agentId, surface, defaultAgentId, defaultSurface, supportedAgentIds, supportedSurfaces, metadata }?: NormalizePiAgentChatRequestInput): PiAgentChatRequest;
-export declare function createPiAgentChatRouteHandler<TRequest = PiAgentChatRequest, TResult extends PiAgentChatHandlerResult = PiAgentChatHandlerResult>(options: PiAgentChatRouteOptions<TRequest, TResult>): PiAgentChatRouteHandler;
-export declare function startPiAgentChatServer<TRequest = PiAgentChatRequest, TResult extends PiAgentChatHandlerResult = PiAgentChatHandlerResult>(options: PiAgentChatServerOptions<TRequest, TResult>): Server;
+export declare function createPiAgentChatRouteHandler<TRequest = PiAgentChatRequest, TResult = PiAgentChatHandlerResult>(options: PiAgentChatRouteOptions<TRequest, TResult>): PiAgentChatRouteHandler;
+export declare function startPiAgentChatServer<TRequest = PiAgentChatRequest, TResult = PiAgentChatHandlerResult>(options: PiAgentChatServerOptions<TRequest, TResult>): Server;
 export declare function readPiAgentChatJson(req: IncomingMessage, maxBodyBytes?: number): Promise<unknown>;
 export declare function sendPiAgentChatJson(res: ServerResponse, statusCode: number, body: unknown): void;
 export type { JsonObject, JsonValue } from "../sharedTypes.js";

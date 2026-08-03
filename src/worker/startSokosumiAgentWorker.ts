@@ -111,6 +111,43 @@ export type SokosumiTaskCompletionHandler<
   TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput
 > = (input: SokosumiTaskCompletionInput<TEvent, TTask>) => Promise<TTaskEvent | undefined>;
 
+export type SokosumiWorkerCreatedTaskEvent<
+  TClient extends SokosumiTaskPollerClient = SokosumiTaskPollerClient
+> = Awaited<ReturnType<TClient["createTaskEvent"]>>;
+
+export type SokosumiAgentWorkerClientOption<
+  TClient extends SokosumiTaskPollerClient = SokosumiHttpClient
+> = SokosumiHttpClient extends TClient
+  ? { client?: TClient }
+  : { client: TClient };
+
+export type SokosumiAgentWorkerTaskHandlerOption<
+  TTaskContext extends SokosumiTaskContext,
+  TTaskEvent extends SokosumiTaskEventInput,
+  TClient extends SokosumiTaskPollerClient,
+  TTrace extends SokosumiTaskTrace
+> = SokosumiTaskEventInput extends TTaskEvent
+  ? {
+      createTaskHandler?: SokosumiTaskCompletionHandlerOptions<
+        SokosumiTaskEvent,
+        SokosumiTaskSnapshot,
+        TTaskEvent,
+        TClient,
+        TTaskContext,
+        TTrace
+      >["createTaskHandler"];
+    }
+  : {
+      createTaskHandler: SokosumiTaskCompletionHandlerOptions<
+        SokosumiTaskEvent,
+        SokosumiTaskSnapshot,
+        TTaskEvent,
+        TClient,
+        TTaskContext,
+        TTrace
+      >["createTaskHandler"];
+    };
+
 export type SokosumiAgentWorkerOptions<
   TTaskContext extends SokosumiTaskContext = SokosumiTaskContext,
   TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput,
@@ -136,29 +173,36 @@ export type SokosumiAgentWorkerOptions<
     TTaskContext,
     TTrace
   >["createTrace"];
-  createTaskHandler?: SokosumiTaskCompletionHandlerOptions<
-    SokosumiTaskEvent,
-    SokosumiTaskSnapshot,
-    TTaskEvent,
-    TClient,
-    TTaskContext,
-    TTrace
-  >["createTaskHandler"];
   createStaleInputRequiredEvent?: (
-    input: SokosumiStaleInputRequiredEventInput & { client: TClient }
-  ) => Awaitable<SokosumiTaskEventInput | undefined>;
+    input: SokosumiStaleInputRequiredEventInput<SokosumiTaskEvent, SokosumiTaskSnapshot> & {
+      client: TClient;
+    }
+  ) => Awaitable<TTaskEvent | undefined>;
   beforeTaskEventCreated?: (
-    input: SokosumiBeforeTaskEventCreatedInput & { client: TClient }
-  ) => Awaitable<SokosumiTaskEventInput | undefined>;
+    input: SokosumiBeforeTaskEventCreatedInput<
+      SokosumiTaskEvent,
+      SokosumiTaskSnapshot,
+      TTaskEvent
+    > & { client: TClient }
+  ) => Awaitable<TTaskEvent | undefined>;
   afterTaskEventCreated?: (
-    input: SokosumiAfterTaskEventCreatedInput & { client: TClient }
+    input: SokosumiAfterTaskEventCreatedInput<
+      SokosumiTaskEvent,
+      SokosumiTaskSnapshot,
+      TTaskEvent,
+      SokosumiWorkerCreatedTaskEvent<TClient>
+    > & { client: TClient }
   ) => Awaitable<unknown>;
-  client?: TClient;
 } & SokosumiTaskContextResolverOption<
   SokosumiTaskEvent,
   SokosumiTaskSnapshot,
   TClient,
   TTaskContext,
+  TTrace
+> & SokosumiAgentWorkerClientOption<TClient> & SokosumiAgentWorkerTaskHandlerOption<
+  TTaskContext,
+  TTaskEvent,
+  TClient,
   TTrace
 >;
 
@@ -167,6 +211,15 @@ export type SokosumiAgentWorkerRuntime<TClient = SokosumiHttpClient> = {
   poller: SokosumiTaskPoller;
 };
 
+export function startSokosumiAgentWorker(): SokosumiAgentWorkerRuntime<SokosumiHttpClient> | undefined;
+export function startSokosumiAgentWorker<
+  TTaskContext extends SokosumiTaskContext = SokosumiTaskContext,
+  TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput,
+  TClient extends SokosumiTaskPollerClient = SokosumiHttpClient,
+  TTrace extends SokosumiTaskTrace = SokosumiTaskTrace
+>(
+  options: SokosumiAgentWorkerOptions<TTaskContext, TTaskEvent, TClient, TTrace>
+): SokosumiAgentWorkerRuntime<TClient> | undefined;
 export function startSokosumiAgentWorker<
   TTaskContext extends SokosumiTaskContext = SokosumiTaskContext,
   TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput,
@@ -216,10 +269,24 @@ export function startSokosumiAgentWorker<
         resolveTaskContext,
         createTaskHandler
       })
-    : ({ task }) => createBootstrapCompletedEvent({ task, bootstrapComment });
+    : ({ task }) => {
+        // The conditional worker option only permits this fallback when the base event satisfies TTaskEvent.
+        return createBootstrapCompletedEvent({ task, bootstrapComment }) as TTaskEvent;
+      };
 
-  const poller = createSokosumiTaskPoller({
-    client,
+  const poller = createSokosumiTaskPoller<
+    SokosumiTaskEvent,
+    SokosumiTaskSnapshot,
+    TTaskEvent,
+    SokosumiWorkerCreatedTaskEvent<TClient>
+  >({
+    // ReturnType<TClient["createTaskEvent"]> is the created-event type, but TypeScript cannot
+    // prove that relationship through the generic port; the runtime method check above protects it.
+    client: client as unknown as SokosumiTaskPollerClient<
+      SokosumiTaskEvent,
+      SokosumiTaskSnapshot,
+      SokosumiWorkerCreatedTaskEvent<TClient>
+    >,
     intervalMs,
     limit,
     maxPages,
@@ -270,6 +337,8 @@ function resolveWorkerClient<TClient extends SokosumiTaskPollerClient>(
   ) {
     throw new Error("Sokosumi worker client must implement listCoworkerEvents, getTask, and createTaskEvent.");
   }
+  // SokosumiAgentWorkerClientOption requires custom client extensions explicitly;
+  // when omitted, its conditional contract proves the HTTP client is assignable to TClient.
   return client as TClient;
 }
 
