@@ -1,5 +1,6 @@
 import http from "node:http";
 import { extractSokosumiIdentityMetadata } from "../identity/resolveSokosumiIdentity.js";
+import { isRecord } from "../sharedTypes.js";
 export class PiAgentChatRequestError extends Error {
     statusCode;
     constructor(message, statusCode = 400) {
@@ -9,40 +10,44 @@ export class PiAgentChatRequestError extends Error {
     }
 }
 export function normalizePiAgentChatRequest({ body = {}, headers = {}, agentId, surface, defaultAgentId, defaultSurface = "chat", supportedAgentIds, supportedSurfaces, metadata = {} } = {}) {
-    const normalizedAgentId = normalizeIdentifier(firstString(agentId, body?.agentId, body?.agent_id, body?.coworker, body?.metadata?.agentId, body?.metadata?.coworker, defaultAgentId));
+    const payload = isRecord(body) ? body : {};
+    const bodyMetadata = recordProperty(payload, "metadata");
+    const normalizedAgentId = normalizeIdentifier(firstString(agentId, property(payload, "agentId"), property(payload, "agent_id"), property(payload, "coworker"), property(bodyMetadata, "agentId"), property(bodyMetadata, "coworker"), defaultAgentId));
     if (supportedAgentIds?.length) {
         if (!normalizedAgentId || !includesIdentifier(supportedAgentIds, normalizedAgentId)) {
             throw new PiAgentChatRequestError("Unsupported agent for chat request.");
         }
     }
-    const normalizedSurface = normalizeIdentifier(firstString(surface, body?.surface, body?.interface, defaultSurface));
+    const normalizedSurface = normalizeIdentifier(firstString(surface, property(payload, "surface"), property(payload, "interface"), defaultSurface));
     if (!normalizedSurface) {
         throw new PiAgentChatRequestError("Chat request surface is required.");
     }
     if (!isSupportedSurface(normalizedSurface, normalizedAgentId, supportedSurfaces)) {
         throw new PiAgentChatRequestError(`Unsupported chat surface: ${normalizedSurface}.`);
     }
-    const identity = (extractSokosumiIdentityMetadata(body, headers) || {});
-    const organizationId = firstString(body?.organizationId, body?.organization_id, body?.workspaceId, body?.workspace_id, body?.metadata?.organizationId, identity.organizationId, identity.workspaceId, headerValue(headers, "x-organization-id"), headerValue(headers, "x-delegation-organization-id"));
-    const attachments = Array.isArray(body?.attachments)
-        ? body.attachments
-        : Array.isArray(body?.files)
-            ? body.files
+    const identity = extractSokosumiIdentityMetadata(payload, headers);
+    const organizationId = firstString(property(payload, "organizationId"), property(payload, "organization_id"), property(payload, "workspaceId"), property(payload, "workspace_id"), property(bodyMetadata, "organizationId"), identity?.organizationId, identity?.workspaceId, headerValue(headers, "x-organization-id"), headerValue(headers, "x-delegation-organization-id"));
+    const attachmentsValue = property(payload, "attachments");
+    const filesValue = property(payload, "files");
+    const attachments = Array.isArray(attachmentsValue)
+        ? attachmentsValue
+        : Array.isArray(filesValue)
+            ? filesValue
             : undefined;
     return {
         ...(normalizedAgentId ? { agentId: normalizedAgentId } : {}),
         surface: normalizedSurface,
-        userId: firstString(body?.userId, body?.user_id, body?.senderId, body?.sender_id, body?.from?.id, body?.from?.email, body?.sender?.id, body?.sender?.email, body?.message?.from?.id, body?.message?.from?.email, body?.metadata?.userId, identity.userId, headerValue(headers, "x-user-id"), headerValue(headers, "x-delegation-user-id"), "anonymous"),
+        userId: firstString(property(payload, "userId"), property(payload, "user_id"), property(payload, "senderId"), property(payload, "sender_id"), path(payload, "from", "id"), path(payload, "from", "email"), path(payload, "sender", "id"), path(payload, "sender", "email"), path(payload, "message", "from", "id"), path(payload, "message", "from", "email"), property(bodyMetadata, "userId"), identity?.userId, headerValue(headers, "x-user-id"), headerValue(headers, "x-delegation-user-id"), "anonymous") || "anonymous",
         ...(organizationId ? { organizationId } : {}),
-        message: extractMessage(body),
+        message: extractMessage(payload),
         ...(attachments ? { attachments } : {}),
         metadata: {
-            ...(body?.metadata && typeof body.metadata === "object" ? body.metadata : {}),
+            ...(bodyMetadata || {}),
             ...metadata,
-            ...(Object.keys(identity).length ? { identity } : {}),
-            sourcePayloadType: detectPayloadType(body),
+            ...(identity ? { identity } : {}),
+            sourcePayloadType: detectPayloadType(payload),
             routeSurface: normalizedSurface,
-            sourcePayload: sanitizePayload(body)
+            sourcePayload: sanitizePayload(payload)
         }
     };
 }
@@ -80,7 +85,7 @@ export function createPiAgentChatRouteHandler(options) {
         }
         catch (error) {
             await options.onError?.({ error, req, res, body });
-            sendJson(res, getStatusCode(error), { error: error?.message || "Internal server error" });
+            sendJson(res, getStatusCode(error), { error: getErrorMessage(error) });
         }
         return true;
     };
@@ -141,11 +146,19 @@ function sendJson(res, statusCode, body) {
     res.end(`${JSON.stringify(body)}\n`);
 }
 function getStatusCode(error) {
-    const statusCode = Number(error?.statusCode || error?.status || 500);
+    const source = isRecord(error) ? error : {};
+    const statusCode = Number(source.statusCode || source.status || 500);
     return Number.isInteger(statusCode) && statusCode >= 400 && statusCode <= 599 ? statusCode : 500;
 }
+function getErrorMessage(error) {
+    if (error instanceof Error && error.message)
+        return error.message;
+    if (isRecord(error) && typeof error.message === "string" && error.message)
+        return error.message;
+    return "Internal server error";
+}
 function extractMessage(body) {
-    const message = firstString(body?.message, body?.text, body?.content, body?.body, body?.comment, body?.description, body?.prompt, body?.input, body?.message?.text, body?.message?.body, body?.message?.content, body?.email?.text, body?.email?.body, body?.comment?.body, body?.issue?.body, body?.issue?.title, body?.pull_request?.body, body?.pull_request?.title, body?.tweet?.text, body?.post?.text, getLastMessageText(body?.messages));
+    const message = firstString(property(body, "message"), property(body, "text"), property(body, "content"), property(body, "body"), property(body, "comment"), property(body, "description"), property(body, "prompt"), property(body, "input"), path(body, "message", "text"), path(body, "message", "body"), path(body, "message", "content"), path(body, "email", "text"), path(body, "email", "body"), path(body, "comment", "body"), path(body, "issue", "body"), path(body, "issue", "title"), path(body, "pull_request", "body"), path(body, "pull_request", "title"), path(body, "tweet", "text"), path(body, "post", "text"), getLastMessageText(property(body, "messages")));
     return String(message || "").trim();
 }
 function getLastMessageText(messages) {
@@ -161,32 +174,31 @@ function getLastMessageText(messages) {
 function getMessageText(message) {
     if (typeof message === "string")
         return message;
-    if (!message || typeof message !== "object")
+    if (!isRecord(message))
         return undefined;
-    const value = message;
-    if (typeof value.content === "string")
-        return value.content;
-    if (typeof value.text === "string")
-        return value.text;
-    if (typeof value.body === "string")
-        return value.body;
-    if (Array.isArray(value.content)) {
-        return value.content
-            .map((part) => typeof part === "string" ? part : firstString(part?.text, part?.content))
-            .filter(Boolean)
+    if (typeof message.content === "string")
+        return message.content;
+    if (typeof message.text === "string")
+        return message.text;
+    if (typeof message.body === "string")
+        return message.body;
+    if (Array.isArray(message.content)) {
+        return message.content
+            .map((part) => typeof part === "string" ? part : firstString(pathValue(part, "text"), pathValue(part, "content")))
+            .filter((part) => Boolean(part))
             .join("\n")
             .trim() || undefined;
     }
     return undefined;
 }
 function detectPayloadType(body) {
-    if (body?.issue || body?.pull_request)
+    if (body.issue || body.pull_request)
         return "github";
-    if (body?.tweet || body?.post)
+    if (body.tweet || body.post)
         return "social";
-    if (body?.email)
+    if (body.email)
         return "email";
-    if (body?.message || body?.messages)
+    if (body.message || body.messages)
         return "message";
     return "chat";
 }
@@ -197,7 +209,7 @@ function sanitizePayload(value, depth = 0) {
         return value;
     if (Array.isArray(value))
         return value.slice(0, 20).map((item) => sanitizePayload(item, depth + 1));
-    if (typeof value !== "object")
+    if (!isRecord(value))
         return String(value);
     const result = {};
     for (const [key, child] of Object.entries(value)) {
@@ -212,12 +224,16 @@ function sanitizePayload(value, depth = 0) {
 function isSupportedSurface(surface, agentId, supportedSurfaces) {
     if (!supportedSurfaces)
         return true;
-    if (Array.isArray(supportedSurfaces))
+    if (isSupportedSurfaceList(supportedSurfaces))
         return includesIdentifier(supportedSurfaces, surface);
     if (!agentId)
         return false;
-    const values = supportedSurfaces[agentId] || supportedSurfaces[agentId.toLowerCase()];
+    const surfaceMap = supportedSurfaces;
+    const values = surfaceMap[agentId] || surfaceMap[agentId.toLowerCase()];
     return Array.isArray(values) && includesIdentifier(values, surface);
+}
+function isSupportedSurfaceList(value) {
+    return Array.isArray(value);
 }
 function includesIdentifier(values, value) {
     return values.map((item) => normalizeIdentifier(item)).includes(value);
@@ -238,5 +254,24 @@ function firstString(...values) {
 function headerValue(headers, name) {
     const value = headers[name] || headers[name.toLowerCase()];
     return Array.isArray(value) ? value[0] : value;
+}
+function property(source, key) {
+    return source?.[key];
+}
+function recordProperty(source, key) {
+    const value = property(source, key);
+    return isRecord(value) ? value : undefined;
+}
+function path(source, ...keys) {
+    let value = source;
+    for (const key of keys) {
+        if (!isRecord(value))
+            return undefined;
+        value = value[key];
+    }
+    return value;
+}
+function pathValue(source, key) {
+    return isRecord(source) ? source[key] : undefined;
 }
 //# sourceMappingURL=createPiAgentChatServer.js.map

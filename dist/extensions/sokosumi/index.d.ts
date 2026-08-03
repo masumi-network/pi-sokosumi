@@ -1,2 +1,27 @@
 import type { PiExtensionAPI } from "../../src/piTypes.js";
+import { type SokosumiEventOrigin, type SokosumiTaskEventStatus } from "../../src/client/types.js";
+export type SokosumiExtensionMode = "api" | "disabled";
+export type SokosumiExtensionPollerMode = "claim" | "complete";
+export type SokosumiExtensionConfig = {
+    extensionMode: SokosumiExtensionMode;
+    apiUrl: string;
+    coworkerApiKey: string;
+    pollerEnabled: boolean;
+    pollIntervalMs: number;
+    pollLimit: number;
+    pollMaxPages: number;
+    readyStatuses: SokosumiTaskEventStatus[];
+    skipExistingProgress: boolean;
+    pollerMode: SokosumiExtensionPollerMode;
+    claimEnabled: boolean;
+    claimStatus: SokosumiTaskEventStatus;
+    completeStatus: SokosumiTaskEventStatus;
+    failStatus: SokosumiTaskEventStatus;
+    origin: SokosumiEventOrigin;
+    claimComment: string;
+    completeComment: string;
+    failComment: string;
+};
+export type SokosumiExtension = (pi: PiExtensionAPI) => void;
 export default function sokosumiExtension(pi: PiExtensionAPI): void;
+export type { PiExtensionAPI, PiExtensionEventContext, PiExtensionEventHandler, PiNotificationLevel, PiToolContent, PiToolDefinition, PiToolRegistrationAPI, PiToolResult } from "../../src/piTypes.js";

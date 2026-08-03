@@ -1,19 +1,29 @@
+import type { Awaitable } from "./sharedTypes.js";
 export type PiToolContent = {
     type: "text";
     text: string;
 };
-export type PiToolResult = {
+export type PiToolResult<TDetails = unknown> = {
     content: PiToolContent[];
-    details?: unknown;
+    details?: TDetails;
 };
-export type PiToolDefinition = {
+export type PiToolDefinition<TParams extends Record<string, unknown> = Record<string, unknown>, TDetails = unknown> = {
     name: string;
     label?: string;
     description?: string;
     parameters: unknown;
-    execute(toolCallId: string, params: any): Promise<PiToolResult> | PiToolResult;
+    execute(toolCallId: string, params: TParams): Awaitable<PiToolResult<TDetails>>;
 };
-export type PiExtensionAPI = {
-    registerTool(tool: PiToolDefinition): void;
-    on?(eventName: string, handler: (event: unknown, context: any) => unknown): void;
+export type PiNotificationLevel = "info" | "warning" | "error";
+export type PiExtensionEventContext = Record<string, unknown> & {
+    ui: {
+        notify(message: string, level: PiNotificationLevel): void;
+    };
+};
+export type PiExtensionEventHandler<TEvent = unknown, TContext extends PiExtensionEventContext = PiExtensionEventContext> = (event: TEvent, context: TContext) => unknown;
+export type PiToolRegistrationAPI = {
+    registerTool<TParams extends Record<string, unknown>, TDetails>(tool: PiToolDefinition<TParams, TDetails>): void;
+};
+export type PiExtensionAPI = PiToolRegistrationAPI & {
+    on<TEvent = unknown, TContext extends PiExtensionEventContext = PiExtensionEventContext>(eventName: string, handler: PiExtensionEventHandler<TEvent, TContext>): void;
 };

@@ -1,30 +1,125 @@
-// @ts-nocheck
-import { SOKOSUMI_TASK_EVENT_STATUS, normalizeSokosumiTaskStatus } from "../client/types.js";
+import {
+  SOKOSUMI_TASK_EVENT_STATUS,
+  normalizeSokosumiTaskStatus,
+  type SokosumiTaskEvent,
+  type SokosumiTaskEventInput,
+  type SokosumiTaskSnapshot
+} from "../client/types.js";
+import type {
+  SokosumiAfterTaskEventCreatedInput,
+  SokosumiBeforeTaskEventCreatedInput
+} from "../poller/createSokosumiTaskPoller.js";
+import type { Awaitable, SokosumiLogger } from "../sharedTypes.js";
+import { isRecord } from "../sharedTypes.js";
 import {
   canonicalJson,
   createSokosumiMasumiPaymentPayload,
   normalizeMasumiCostCents,
   normalizeMasumiRawUnits,
-  sha256Hex
+  sha256Hex,
+  type MasumiAmountInput,
+  type MasumiCreatePaymentResult,
+  type MasumiPaymentClient,
+  type SokosumiMasumiPaymentPayload
 } from "./masumiPaymentClient.js";
+import type {
+  MasumiPaymentStore,
+  MasumiPendingPaymentRecord
+} from "./masumiPaymentStore.js";
 
-export function createMasumiCompletionHooks({
+export type MasumiCompletionCostDetails = {
+  costCents?: MasumiAmountInput;
+  credits?: MasumiAmountInput;
+  totalCredits?: MasumiAmountInput;
+  amountRawUnits?: MasumiAmountInput;
+  rawAmount?: MasumiAmountInput;
+};
+
+export type MasumiCompletionCostResult =
+  | MasumiAmountInput
+  | MasumiCompletionCostDetails
+  | false
+  | null
+  | undefined
+  | "";
+
+export type MasumiCompletionTaskEvent<TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput> =
+  TTaskEvent & {
+    masumiPayment?: SokosumiMasumiPaymentPayload;
+  };
+
+export type MasumiCompletionHooksOptions<
+  TEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
+  TTask extends SokosumiTaskSnapshot<TEvent> = SokosumiTaskSnapshot<TEvent>,
+  TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput,
+  TCreatedTaskEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
+  TRecord extends MasumiPendingPaymentRecord = MasumiPendingPaymentRecord
+> = {
+  enabled?: boolean;
+  masumiClient?: Pick<MasumiPaymentClient, "createPayment">;
+  store?: Pick<MasumiPaymentStore<TRecord>, "recordPendingMasumiPayment">;
+  calculateCostCents?: (
+    input: SokosumiBeforeTaskEventCreatedInput<TEvent, TTask, TTaskEvent>
+  ) => Awaitable<MasumiCompletionCostResult>;
+  createPaymentMetadata?: (
+    input: SokosumiBeforeTaskEventCreatedInput<TEvent, TTask, TTaskEvent> & {
+      costCents: bigint;
+      amountRawUnits: bigint | null;
+    }
+  ) => Awaitable<string | Record<string, unknown>>;
+  logger?: SokosumiLogger;
+};
+
+export type MasumiCompletionHooks<
+  TEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
+  TTask extends SokosumiTaskSnapshot<TEvent> = SokosumiTaskSnapshot<TEvent>,
+  TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput,
+  TCreatedTaskEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
+  TRecord extends MasumiPendingPaymentRecord = MasumiPendingPaymentRecord
+> = {
+  beforeTaskEventCreated(
+    input: SokosumiBeforeTaskEventCreatedInput<TEvent, TTask, TTaskEvent>
+  ): Promise<MasumiCompletionTaskEvent<TTaskEvent>>;
+  afterTaskEventCreated(
+    input: SokosumiAfterTaskEventCreatedInput<
+      TEvent,
+      TTask,
+      MasumiCompletionTaskEvent<TTaskEvent>,
+      TCreatedTaskEvent
+    >
+  ): Promise<TRecord | undefined>;
+};
+
+export function createMasumiCompletionHooks<
+  TEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
+  TTask extends SokosumiTaskSnapshot<TEvent> = SokosumiTaskSnapshot<TEvent>,
+  TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput,
+  TCreatedTaskEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
+  TRecord extends MasumiPendingPaymentRecord = MasumiPendingPaymentRecord
+>({
   enabled = true,
   masumiClient,
   store,
   calculateCostCents,
   createPaymentMetadata,
   logger = console
-} = {}) {
+}: MasumiCompletionHooksOptions<TEvent, TTask, TTaskEvent, TCreatedTaskEvent, TRecord> = {}): MasumiCompletionHooks<
+  TEvent,
+  TTask,
+  TTaskEvent,
+  TCreatedTaskEvent,
+  TRecord
+> {
   return {
-    async beforeTaskEventCreated(input = {}) {
-      const taskEvent = input.taskEvent || {};
+    async beforeTaskEventCreated(input) {
+      const taskEvent = input.taskEvent;
+      assertMasumiCompatibleTaskEvent(taskEvent);
       if (!enabled || !masumiClient) return taskEvent;
       if (!isCompletedTaskEvent(taskEvent) || taskEvent.masumiPayment) return taskEvent;
 
       const costResult = calculateCostCents
         ? await calculateCostCents(input)
-        : { costCents: taskEvent.credits || taskEvent.metadata?.credits || 1 };
+        : { costCents: taskEvent.credits || metadataCredits(taskEvent.metadata) || 1 };
       const costCents = resolveCostCents(costResult);
       if (!costCents) return taskEvent;
       const amountRawUnits = resolveAmountRawUnits(costResult);
@@ -47,7 +142,7 @@ export function createMasumiCompletionHooks({
         paymentId: masumiPayment.id,
         blockchainIdentifier: masumiPayment.blockchainIdentifier,
         costCents: costCents.toString(),
-        amountRawUnits: amountRawUnits?.toString?.() || ""
+        amountRawUnits: amountRawUnits?.toString() || ""
       });
 
       return {
@@ -56,8 +151,8 @@ export function createMasumiCompletionHooks({
       };
     },
 
-    async afterTaskEventCreated(input = {}) {
-      const taskEvent = input.taskEvent || {};
+    async afterTaskEventCreated(input) {
+      const taskEvent = input.taskEvent;
       const masumiPayment = taskEvent.masumiPayment;
       if (!enabled || !masumiPayment) return undefined;
       if (!store?.recordPendingMasumiPayment) {
@@ -70,7 +165,7 @@ export function createMasumiCompletionHooks({
 
       const resultHash = sha256Hex(canonicalJson(taskEvent));
       const record = await store.recordPendingMasumiPayment({
-        taskId: input.taskId || input.task?.id || input.event?.taskId,
+        taskId: input.taskId || input.task?.id || input.event?.taskId || "",
         triggerEventId: input.event?.id || "",
         taskEventId: input.createdTaskEvent?.id || "",
         paymentId: masumiPayment.id,
@@ -99,26 +194,34 @@ export function createMasumiCompletionHooks({
   };
 }
 
-function isCompletedTaskEvent(taskEvent = {}) {
+function isCompletedTaskEvent(taskEvent: SokosumiTaskEventInput): boolean {
   return normalizeSokosumiTaskStatus(taskEvent.status) === SOKOSUMI_TASK_EVENT_STATUS.COMPLETED;
 }
 
-function resolveCostCents(value) {
-  const raw = value && typeof value === "object" && !Array.isArray(value)
+function resolveCostCents(value: unknown): bigint | null {
+  const raw = isRecord(value)
     ? value.costCents ?? value.credits ?? value.totalCredits
     : value;
   if (raw === false || raw === null || raw === undefined || raw === "") return null;
+  if (!isMasumiAmountInput(raw)) return null;
   return normalizeMasumiCostCents(raw);
 }
 
-function resolveAmountRawUnits(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+function resolveAmountRawUnits(value: unknown): bigint | null {
+  if (!isRecord(value)) return null;
   const raw = value.amountRawUnits ?? value.rawAmount;
   if (raw === false || raw === null || raw === undefined || raw === "") return null;
+  if (!isMasumiAmountInput(raw)) return null;
   return normalizeMasumiRawUnits(raw);
 }
 
-function createDefaultPaymentMetadata({ taskId, task, event, taskEvent, costCents } = {}) {
+function createDefaultPaymentMetadata({
+  taskId,
+  task,
+  event,
+  taskEvent,
+  costCents
+}: SokosumiBeforeTaskEventCreatedInput & { costCents: bigint }): Record<string, unknown> {
   return {
     taskId: taskId || task?.id || event?.taskId || "",
     triggerEventId: event?.id || "",
@@ -127,13 +230,43 @@ function createDefaultPaymentMetadata({ taskId, task, event, taskEvent, costCent
   };
 }
 
-function normalizeRequiredText(value, label) {
+function metadataCredits(value: unknown): unknown {
+  return isRecord(value) ? value.credits : undefined;
+}
+
+function assertMasumiCompatibleTaskEvent<TTaskEvent extends SokosumiTaskEventInput>(
+  taskEvent: TTaskEvent
+): asserts taskEvent is MasumiCompletionTaskEvent<TTaskEvent> {
+  const payment = taskEvent.masumiPayment;
+  if (payment === undefined || payment === null) return;
+  if (
+    !isRecord(payment) ||
+    typeof payment.id !== "string" ||
+    typeof payment.blockchainIdentifier !== "string" ||
+    typeof payment.agentIdentifier !== "string" ||
+    !Array.isArray(payment.Amounts) ||
+    !isRecord(payment.PaymentSource)
+  ) {
+    throw new Error("Masumi completion task event contains an invalid masumiPayment payload.");
+  }
+}
+
+function isMasumiAmountInput(value: unknown): value is MasumiAmountInput {
+  return typeof value === "number" || typeof value === "string" || typeof value === "bigint";
+}
+
+function normalizeRequiredText(value: unknown, label: string): string {
   const text = String(value || "").trim();
   if (!text) throw new Error(`Masumi completion payment requires ${label}.`);
   return text;
 }
 
-function log(logger, event, details = {}, level = "log") {
+function log(
+  logger: SokosumiLogger,
+  event: string,
+  details: Record<string, unknown> = {},
+  level: "log" | "warn" | "error" = "log"
+): void {
   const target = typeof logger?.[level] === "function" ? logger[level] : logger?.log;
   if (!target) return;
   target.call(logger, JSON.stringify({ event, ...details }));

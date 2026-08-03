@@ -1,12 +1,12 @@
 import type {
   CommentOnTaskInput,
   CreateTaskInput,
-  SokosumiClient,
+  MockSokosumiClient,
   SokosumiTask,
   UpdateTaskInput
 } from "./types.js";
 
-export function createMockSokosumiClient(): SokosumiClient {
+export function createMockSokosumiClient(): MockSokosumiClient {
   const tasks = new Map<string, SokosumiTask>();
 
   return {
@@ -76,6 +76,17 @@ export function createMockSokosumiClient(): SokosumiClient {
     }
   };
 }
+
+export type {
+  CommentOnTaskInput,
+  CreateTaskInput,
+  MockSokosumiClient,
+  SokosumiClient,
+  SokosumiTask,
+  SokosumiTaskComment,
+  SokosumiTaskStatus,
+  UpdateTaskInput
+} from "./types.js";
 
 function createId(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;

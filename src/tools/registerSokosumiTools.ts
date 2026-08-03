@@ -1,10 +1,12 @@
 import { Type } from "@earendil-works/pi-ai";
-import type { SokosumiClient } from "../client/types.js";
-import type { PiExtensionAPI } from "../piTypes.js";
+import type { SokosumiClient, UpdateTaskInput } from "../client/types.js";
+import type { PiToolRegistrationAPI } from "../piTypes.js";
 import { createJsonToolResult } from "./createJsonToolResult.js";
 import { createSokosumiCommentOnTaskTool } from "./sokosumiCommentOnTask.js";
 
-export function registerSokosumiTools(pi: PiExtensionAPI, client: SokosumiClient) {
+export type SokosumiMockToolsClient = SokosumiClient;
+
+export function registerSokosumiTools(pi: PiToolRegistrationAPI, client: SokosumiMockToolsClient): void {
   pi.registerTool({
     name: "sokosumi_create_task",
     label: "Create Sokosumi Task",
@@ -22,7 +24,7 @@ export function registerSokosumiTools(pi: PiExtensionAPI, client: SokosumiClient
         ])
       )
     }),
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId: string, params: import("../client/types.js").CreateTaskInput) {
       const task = await client.createTask(params);
       return createJsonToolResult(task);
     }
@@ -46,7 +48,7 @@ export function registerSokosumiTools(pi: PiExtensionAPI, client: SokosumiClient
         ])
       )
     }),
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId: string, params: UpdateTaskInput) {
       const task = await client.updateTask(params);
       return createJsonToolResult(task);
     }
@@ -70,7 +72,7 @@ export function registerSokosumiTools(pi: PiExtensionAPI, client: SokosumiClient
     parameters: Type.Object({
       taskId: Type.String({ description: "Task id" })
     }),
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId: string, params: { taskId: string }) {
       const task = await client.getTask(params.taskId);
       return createJsonToolResult(task || { error: "not_found", taskId: params.taskId });
     }

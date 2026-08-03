@@ -1,19 +1,16 @@
-import type { PiExtensionAPI } from "../piTypes.js";
-type SokosumiHttpClient = {
-    getCurrentCoworker(): Promise<unknown>;
-    listCoworkerEvents(input?: {
-        limit?: number;
-        cursor?: string;
-    }): Promise<unknown>;
-    getTask(taskId: string): Promise<unknown>;
-    createTaskEvent(taskId: string, body: Record<string, unknown>): Promise<unknown>;
-    createCoworkerUsage(input: {
-        userId: string;
-        organizationId?: string | null;
-        idempotencyKey: string;
-        credits: number;
-        referenceId?: string;
-    }): Promise<unknown>;
+import type { SokosumiHttpClient } from "../client/httpSokosumiClient.js";
+import { type CreateCoworkerUsageInput, type SokosumiEventOrigin, type SokosumiTaskEventStatus } from "../client/types.js";
+import type { PiToolRegistrationAPI } from "../piTypes.js";
+export type SokosumiGetTaskToolInput = {
+    taskId: string;
 };
-export declare function registerSokosumiCoworkerTools(pi: PiExtensionAPI, client: SokosumiHttpClient): void;
-export {};
+export type SokosumiCreateTaskEventToolInput = {
+    taskId: string;
+    status: SokosumiTaskEventStatus;
+    comment?: string;
+    origin?: Exclude<SokosumiEventOrigin, "USER">;
+    credits?: number;
+};
+export type SokosumiCreateCoworkerUsageToolInput = CreateCoworkerUsageInput;
+export type SokosumiCoworkerToolsClient = Pick<SokosumiHttpClient, "getCurrentCoworker" | "listCoworkerEvents" | "getTask" | "createTaskEvent" | "createCoworkerUsage">;
+export declare function registerSokosumiCoworkerTools(pi: PiToolRegistrationAPI, client: SokosumiCoworkerToolsClient): void;

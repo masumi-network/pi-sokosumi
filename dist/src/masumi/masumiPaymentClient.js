@@ -1,5 +1,5 @@
-// @ts-nocheck
 import { createHash, randomBytes } from "node:crypto";
+import { isRecord } from "../sharedTypes.js";
 export const MASUMI_NETWORKS = ["Preprod", "Mainnet"];
 export const MASUMI_USDM_UNITS = Object.freeze({
     Preprod: "16a55b2a349361ff88c03788f93e1e966e5d689605d044fef722ddde0014df10745553444d",
@@ -8,6 +8,27 @@ export const MASUMI_USDM_UNITS = Object.freeze({
 export const MASUMI_CENT_RAW_UNITS = 10000n;
 export const MASUMI_DEFAULT_PAY_BY_MS = 16 * 60 * 60 * 1000;
 export const MASUMI_DEFAULT_SUBMIT_RESULT_MS = 17 * 60 * 60 * 1000;
+export const MASUMI_ESCROW_STATES = [
+    "FundsLockingRequested",
+    "FundsLocked",
+    "ResultSubmitted",
+    "Completed",
+    "RefundRequested",
+    "RefundAuthorized",
+    "Disputed"
+];
+export class MasumiPaymentError extends Error {
+    code;
+    statusCode;
+    payload;
+    constructor(message, options) {
+        super(message, options.cause === undefined ? undefined : { cause: options.cause });
+        this.name = "MasumiPaymentError";
+        this.code = options.code;
+        this.statusCode = options.statusCode;
+        this.payload = options.payload;
+    }
+}
 export function createMasumiPaymentClient({ apiUrl, apiToken, agentIdentifier, network = "Preprod", paymentUnit, fetchImpl = fetch, timeoutMs = 30000, now = () => new Date() } = {}) {
     const baseUrl = normalizeMasumiApiUrl(apiUrl);
     const normalizedNetwork = normalizeMasumiNetwork(network);
@@ -18,7 +39,7 @@ export function createMasumiPaymentClient({ apiUrl, apiToken, agentIdentifier, n
         agentIdentifier: configuredAgentIdentifier,
         network: normalizedNetwork,
         paymentUnit: unit,
-        async createPayment(input = {}) {
+        async createPayment(input) {
             const taskId = normalizeRequiredText(input.taskId, "taskId");
             const costCents = resolveMasumiCostCents(input);
             const amountRawUnits = resolveMasumiAmountRawUnits(input, costCents);
@@ -47,7 +68,7 @@ export function createMasumiPaymentClient({ apiUrl, apiToken, agentIdentifier, n
                 method: "POST",
                 body
             });
-            const data = expectSuccess(payload, "Masumi create payment");
+            const data = narrowPayment(expectSuccess(payload, "Masumi create payment"), "Masumi create payment data");
             return {
                 ...data,
                 requestBody: body,
@@ -66,9 +87,9 @@ export function createMasumiPaymentClient({ apiUrl, apiToken, agentIdentifier, n
             if (input.includeHistory !== undefined)
                 search.set("includeHistory", input.includeHistory ? "true" : "false");
             const payload = await request(`/payment?${search.toString()}`);
-            return expectSuccess(payload, "Masumi list payments");
+            return narrowPaymentList(expectSuccess(payload, "Masumi list payments"));
         },
-        async submitResult(input = {}) {
+        async submitResult(input) {
             const body = {
                 network: normalizeMasumiNetwork(input.network || normalizedNetwork),
                 blockchainIdentifier: normalizeRequiredText(input.blockchainIdentifier, "blockchainIdentifier"),
@@ -78,10 +99,10 @@ export function createMasumiPaymentClient({ apiUrl, apiToken, agentIdentifier, n
                 method: "POST",
                 body
             });
-            return expectSuccess(payload, "Masumi submit result");
+            return expectRecord(expectSuccess(payload, "Masumi submit result"), "Masumi submit result data");
         }
     };
-    async function request(path, options = {}) {
+    async function request(path, requestOptions = {}) {
         if (!baseUrl) {
             throw new Error("Masumi payment API URL is required.");
         }
@@ -93,19 +114,22 @@ export function createMasumiPaymentClient({ apiUrl, apiToken, agentIdentifier, n
         let response;
         try {
             response = await fetchImpl(`${baseUrl}${path}`, {
-                method: options.method || "GET",
+                method: requestOptions.method || "GET",
                 headers: {
                     "Content-Type": "application/json",
                     Accept: "application/json",
                     token: apiToken
                 },
-                body: options.body ? JSON.stringify(options.body) : undefined,
+                body: requestOptions.body ? JSON.stringify(requestOptions.body) : undefined,
                 signal: controller.signal
             });
         }
         catch (error) {
-            if (error?.name === "AbortError") {
-                throw new Error(`Masumi request timed out after ${timeoutMs}ms`);
+            if (isRecord(error) && error.name === "AbortError") {
+                throw new MasumiPaymentError(`Masumi request timed out after ${timeoutMs}ms`, {
+                    code: "timeout",
+                    cause: error
+                });
             }
             throw error;
         }
@@ -115,8 +139,17 @@ export function createMasumiPaymentClient({ apiUrl, apiToken, agentIdentifier, n
         const text = await response.text();
         const payload = text ? parseJson(text) : {};
         if (!response.ok) {
-            const message = payload?.message || payload?.error || `Masumi request failed with ${response.status}`;
-            throw new Error(`${message} (${response.status})`);
+            const source = isRecord(payload) ? payload : {};
+            const message = typeof source.message === "string"
+                ? source.message
+                : typeof source.error === "string"
+                    ? source.error
+                    : `Masumi request failed with ${response.status}`;
+            throw new MasumiPaymentError(`${message} (${response.status})`, {
+                code: "http_error",
+                statusCode: response.status,
+                payload
+            });
         }
         return payload;
     }
@@ -215,7 +248,7 @@ export function normalizeMasumiApiUrl(value) {
         return text;
     }
 }
-function resolveMasumiCostCents(input = {}) {
+function resolveMasumiCostCents(input) {
     if (input.costCents !== undefined && input.costCents !== null)
         return normalizeMasumiCostCents(input.costCents);
     if (input.credits !== undefined && input.credits !== null)
@@ -226,7 +259,7 @@ function resolveMasumiCostCents(input = {}) {
         return usdToMasumiCostCents(input.totalCost);
     return 1n;
 }
-function resolveMasumiAmountRawUnits(input = {}, costCents) {
+function resolveMasumiAmountRawUnits(input, costCents) {
     if (input.amountRawUnits !== undefined && input.amountRawUnits !== null)
         return normalizeMasumiRawUnits(input.amountRawUnits);
     if (input.rawAmount !== undefined && input.rawAmount !== null)
@@ -235,17 +268,17 @@ function resolveMasumiAmountRawUnits(input = {}, costCents) {
         return creditsToMasumiRawUnits(input.credits);
     return masumiCentsToRawUnits(costCents);
 }
-function normalizeRequestedFunds(value, { amountRawUnits, unit }) {
+function normalizeRequestedFunds(value, fallback) {
     const funds = Array.isArray(value) && value.length
         ? value
-        : [{ amount: amountRawUnits.toString(), unit }];
+        : [{ amount: fallback.amountRawUnits.toString(), unit: fallback.unit }];
     return funds.map((fund) => ({
         amount: normalizePositiveIntegerString(fund.amount, "RequestedFunds.amount"),
         unit: normalizeRequiredText(fund.unit, "RequestedFunds.unit")
     }));
 }
 function normalizeAmounts(value) {
-    return (Array.isArray(value) ? value : []).map((amount) => ({
+    return value.map((amount) => ({
         amount: String(amount?.amount || ""),
         unit: String(amount?.unit || "")
     }));
@@ -255,14 +288,121 @@ function normalizePaymentMetadata(value, fallback = {}) {
         return value;
     return JSON.stringify({
         ...fallback,
-        ...(value && typeof value === "object" ? value : {})
+        ...(isRecord(value) ? value : {})
     });
 }
 function expectSuccess(payload, label) {
-    if (payload?.status && payload.status !== "success") {
-        throw new Error(`${label} failed: ${payload.message || payload.error || payload.status}`);
+    if (!isRecord(payload))
+        return payload;
+    if (payload.status && payload.status !== "success") {
+        const detail = payload.message || payload.error || payload.status;
+        throw new Error(`${label} failed: ${String(detail)}`);
     }
-    return payload?.data ?? payload;
+    return payload.data ?? payload;
+}
+function narrowPayment(value, label) {
+    const payment = expectRecord(value, label);
+    for (const key of [
+        "id",
+        "blockchainIdentifier",
+        "agentIdentifier",
+        "payByTime",
+        "submitResultTime",
+        "unlockTime",
+        "externalDisputeUnlockTime",
+        "inputHash",
+        "identifierFromPurchaser"
+    ]) {
+        assertOptionalString(payment[key], `${label}.${key}`);
+    }
+    if (payment.RequestedFunds !== undefined)
+        payment.RequestedFunds = narrowAmounts(payment.RequestedFunds, `${label}.RequestedFunds`);
+    if (payment.Amounts !== undefined)
+        payment.Amounts = narrowAmounts(payment.Amounts, `${label}.Amounts`);
+    if (payment.PaymentSource !== undefined)
+        payment.PaymentSource = narrowPaymentSource(payment.PaymentSource, `${label}.PaymentSource`);
+    if (payment.SmartContractWallet !== undefined)
+        payment.SmartContractWallet = narrowWallet(payment.SmartContractWallet, `${label}.SmartContractWallet`);
+    if (payment.SellerWallet !== undefined)
+        payment.SellerWallet = narrowWallet(payment.SellerWallet, `${label}.SellerWallet`);
+    if (payment.NextAction !== undefined)
+        payment.NextAction = narrowNextAction(payment.NextAction, `${label}.NextAction`);
+    if (payment.onChainState !== undefined &&
+        payment.onChainState !== null &&
+        !MASUMI_ESCROW_STATES.some((state) => state === payment.onChainState)) {
+        throwInvalidResponse(`${label}.onChainState is not a supported Masumi escrow state.`, payment.onChainState);
+    }
+    return payment;
+}
+function narrowPaymentList(value) {
+    if (Array.isArray(value)) {
+        return value.map((payment, index) => narrowPayment(payment, `Masumi payment ${index}`));
+    }
+    const page = expectRecord(value, "Masumi payment list data");
+    if (page.Payments !== undefined) {
+        if (!Array.isArray(page.Payments)) {
+            throwInvalidResponse("Masumi payment list Payments must be an array.", page.Payments);
+        }
+        page.Payments = page.Payments.map((payment, index) => narrowPayment(payment, `Masumi payment ${index}`));
+    }
+    return page;
+}
+function narrowAmounts(value, label) {
+    if (!Array.isArray(value))
+        throwInvalidResponse(`${label} must be an array.`, value);
+    return value.map((entry, index) => {
+        const amount = expectRecord(entry, `${label}[${index}]`);
+        if (typeof amount.amount !== "string" || typeof amount.unit !== "string") {
+            throwInvalidResponse(`${label}[${index}] must contain string amount and unit fields.`, entry);
+        }
+        return { amount: amount.amount, unit: amount.unit };
+    });
+}
+function narrowPaymentSource(value, label) {
+    const source = expectRecord(value, label);
+    if (source.network !== undefined && !MASUMI_NETWORKS.some((network) => network === source.network)) {
+        throwInvalidResponse(`${label}.network is not a supported Masumi network.`, source.network);
+    }
+    assertOptionalString(source.smartContractAddress, `${label}.smartContractAddress`);
+    if (source.policyId !== undefined && source.policyId !== null && typeof source.policyId !== "string") {
+        throwInvalidResponse(`${label}.policyId must be a string or null when provided.`, source.policyId);
+    }
+    return source;
+}
+function narrowWallet(value, label) {
+    const wallet = expectRecord(value, label);
+    if (wallet.walletVkey !== undefined && wallet.walletVkey !== null && typeof wallet.walletVkey !== "string") {
+        throwInvalidResponse(`${label}.walletVkey must be a string or null when provided.`, wallet.walletVkey);
+    }
+    return wallet;
+}
+function narrowNextAction(value, label) {
+    const action = expectRecord(value, label);
+    if (action.requestedAction !== undefined &&
+        action.requestedAction !== null &&
+        action.requestedAction !== "SubmitResultRequested" &&
+        !MASUMI_ESCROW_STATES.some((state) => state === action.requestedAction)) {
+        throwInvalidResponse(`${label}.requestedAction is not a supported Masumi payment action.`, action.requestedAction);
+    }
+    for (const key of ["errorType", "errorNote"]) {
+        if (action[key] !== undefined && action[key] !== null && typeof action[key] !== "string") {
+            throwInvalidResponse(`${label}.${key} must be a string or null when provided.`, action[key]);
+        }
+    }
+    return action;
+}
+function expectRecord(value, label) {
+    if (!isRecord(value))
+        throwInvalidResponse(`${label} must be a JSON object.`, value);
+    return value;
+}
+function assertOptionalString(value, label) {
+    if (value !== undefined && typeof value !== "string") {
+        throwInvalidResponse(`${label} must be a string when provided.`, value);
+    }
+}
+function throwInvalidResponse(message, payload) {
+    throw new MasumiPaymentError(message, { code: "invalid_response", payload });
 }
 function normalizeHex(value, label) {
     const text = normalizeRequiredText(value, label).toLowerCase();
@@ -328,7 +468,7 @@ function addMs(date, ms) {
 function canonicalize(value) {
     if (Array.isArray(value))
         return value.map(canonicalize);
-    if (!value || typeof value !== "object")
+    if (!isRecord(value))
         return value;
     if (value instanceof Date)
         return value.toISOString();

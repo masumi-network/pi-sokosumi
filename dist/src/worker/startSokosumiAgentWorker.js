@@ -1,8 +1,8 @@
-// @ts-nocheck
 import { createHttpSokosumiClient } from "../client/httpSokosumiClient.js";
 import { createSokosumiTaskPoller } from "../poller/createSokosumiTaskPoller.js";
 import { resolveSokosumiIdentity } from "../identity/resolveSokosumiIdentity.js";
 import { SOKOSUMI_TASK_EVENT_STATUS } from "../client/types.js";
+import { getErrorMessage } from "../sharedTypes.js";
 export function startSokosumiAgentWorker({ enabled, apiUrl, apiKey, intervalMs = 15000, limit = 20, maxPages = 10, logger = console, runningComment = "The coworker picked up this task.", canceledComment = "The coworker canceled this task.", bootstrapComment, inputRequiredTimeoutMs, createTaskHandler, createTrace, resolveTaskContext, createStaleInputRequiredEvent, beforeTaskEventCreated, afterTaskEventCreated, client: providedClient } = {}) {
     if (!enabled) {
         log(logger, "sokosumi_task_poller_disabled");
@@ -12,7 +12,7 @@ export function startSokosumiAgentWorker({ enabled, apiUrl, apiKey, intervalMs =
         log(logger, "sokosumi_task_poller_missing_key");
         return undefined;
     }
-    const client = providedClient || createHttpSokosumiClient({ apiUrl, apiKey });
+    const client = resolveWorkerClient(providedClient, { apiUrl, apiKey });
     const createCompletedEvent = createTaskHandler
         ? createSokosumiTaskCompletionHandler({
             client,
@@ -60,10 +60,19 @@ export function createRunningTaskEvent(comment) {
         ...(normalizedComment ? { comment: normalizedComment } : {})
     };
 }
-export function createSokosumiTaskCompletionHandler({ client, logger = console, createTrace, resolveTaskContext, createTaskHandler } = {}) {
-    return async function handleSokosumiTaskCompletion(input = {}) {
-        const task = input.task || {};
-        const event = input.event || {};
+function resolveWorkerClient(providedClient, options) {
+    const client = providedClient || createHttpSokosumiClient(options);
+    if (typeof client.listCoworkerEvents !== "function" ||
+        typeof client.getTask !== "function" ||
+        typeof client.createTaskEvent !== "function") {
+        throw new Error("Sokosumi worker client must implement listCoworkerEvents, getTask, and createTaskEvent.");
+    }
+    return client;
+}
+export function createSokosumiTaskCompletionHandler({ client, logger = console, createTrace, resolveTaskContext, createTaskHandler }) {
+    return async function handleSokosumiTaskCompletion(input) {
+        const task = input.task;
+        const event = input.event;
         const initialIdentity = resolveSokosumiIdentity(task);
         const trace = createTrace
             ? await createTrace({
@@ -121,7 +130,7 @@ async function traceStep(trace, step, metadata = {}, options = {}) {
         await trace.step(step, metadata, options);
     }
     catch (error) {
-        log(console, "sokosumi_task_trace_step_failed", { step, message: error.message }, "error");
+        log(console, "sokosumi_task_trace_step_failed", { step, message: getErrorMessage(error) }, "error");
     }
 }
 function createBootstrapCompletedEvent({ task, bootstrapComment }) {

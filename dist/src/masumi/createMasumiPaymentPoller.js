@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { getErrorMessage } from "../sharedTypes.js";
 export function createMasumiPaymentPoller({ enabled = true, client, store, intervalMs = 15 * 60 * 1000, limit = 20, logger = console } = {}) {
     let running = false;
     let timer;
@@ -36,7 +36,7 @@ export function createMasumiPaymentPoller({ enabled = true, client, store, inter
             await processPendingPayments();
         }
         catch (error) {
-            log(logger, "masumi_payment_poller_error", { message: error.message }, "error");
+            log(logger, "masumi_payment_poller_error", { message: getErrorMessage(error) }, "error");
         }
         finally {
             running = false;
@@ -54,7 +54,7 @@ export function createMasumiPaymentPoller({ enabled = true, client, store, inter
                 log(logger, "masumi_payment_record_error", {
                     taskId: record.taskId,
                     blockchainIdentifier: record.blockchainIdentifier,
-                    message: error.message
+                    message: getErrorMessage(error)
                 }, "error");
             }
         }
@@ -110,14 +110,14 @@ export function createMasumiPaymentPoller({ enabled = true, client, store, inter
     async function findPayment(record) {
         const result = await client.listPayments({
             limit: 100,
-            network: record.network
+            network: record.network || undefined
         });
-        const payments = Array.isArray(result?.Payments) ? result.Payments : Array.isArray(result) ? result : [];
-        return payments.find((payment) => payment?.blockchainIdentifier === record.blockchainIdentifier);
+        const payments = Array.isArray(result) ? result : Array.isArray(result.Payments) ? result.Payments : [];
+        return payments.find((payment) => payment.blockchainIdentifier === record.blockchainIdentifier);
     }
 }
-export function isReadyForSubmitResult(payment = {}) {
-    return payment?.NextAction?.requestedAction === "SubmitResultRequested" || payment?.onChainState === "FundsLocked";
+export function isReadyForSubmitResult(payment) {
+    return payment.NextAction?.requestedAction === "SubmitResultRequested" || payment.onChainState === "FundsLocked";
 }
 function log(logger, event, details = {}, level = "log") {
     const target = typeof logger?.[level] === "function" ? logger[level] : logger?.log;

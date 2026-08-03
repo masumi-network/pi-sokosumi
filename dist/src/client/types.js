@@ -1,3 +1,19 @@
+export const SOKOSUMI_EVENT_ORIGINS = [
+    "USER",
+    "SLACK",
+    "TEAMS",
+    "EMAIL",
+    "LINEAR",
+    "GITHUB",
+    "WHATSAPP",
+    "TELEGRAM",
+    "SIGNAL",
+    "DISCORD",
+    "CHAT",
+    "MESSENGER",
+    "SOKOSUMI",
+    "UNKNOWN"
+];
 export const SOKOSUMI_TASK_EVENT_STATUSES = [
     "DRAFT",
     "READY",
@@ -54,19 +70,22 @@ export const SOKOSUMI_TASK_EVENT_STATUS_DECISION_PROMPT = [
     "Never use COMPLETED when your reply asks the user to do something before the task can finish."
 ].join("\n");
 export function isSokosumiTaskEventStatus(status) {
-    return SOKOSUMI_TASK_EVENT_STATUSES.includes(normalizeSokosumiTaskStatus(status));
+    return SOKOSUMI_TASK_EVENT_STATUSES.some((candidate) => candidate === status);
 }
 export function isSokosumiCoworkerProgressStatus(status) {
-    return SOKOSUMI_COWORKER_PROGRESS_STATUSES.includes(normalizeSokosumiTaskStatus(status));
+    return SOKOSUMI_COWORKER_PROGRESS_STATUSES.some((candidate) => candidate === status);
 }
 export function isSokosumiTerminalTaskEventStatus(status) {
-    return SOKOSUMI_TERMINAL_TASK_EVENT_STATUSES.includes(normalizeSokosumiTaskStatus(status));
+    return SOKOSUMI_TERMINAL_TASK_EVENT_STATUSES.some((candidate) => candidate === status);
 }
 export function isSokosumiCanceledTaskEventStatus(status) {
-    return SOKOSUMI_CANCELED_TASK_EVENT_STATUSES.includes(normalizeSokosumiTaskStatus(status));
+    return SOKOSUMI_CANCELED_TASK_EVENT_STATUSES.some((candidate) => candidate === status);
 }
 export function isSokosumiTaskEventDecisionStatus(status) {
-    return SOKOSUMI_TASK_EVENT_DECISION_STATUSES.includes(normalizeSokosumiTaskStatus(status));
+    return SOKOSUMI_TASK_EVENT_DECISION_STATUSES.some((candidate) => candidate === status);
+}
+export function isSokosumiEventOrigin(origin) {
+    return SOKOSUMI_EVENT_ORIGINS.some((candidate) => candidate === origin);
 }
 export function normalizeSokosumiTaskStatus(status) {
     return String(status || "")

@@ -1,10 +1,45 @@
-// @ts-nocheck
 import type { PiExtensionAPI } from "../../src/piTypes.js";
 import { createHttpSokosumiClient } from "../../src/client/httpSokosumiClient.js";
 import { createSokosumiTaskPoller } from "../../src/poller/createSokosumiTaskPoller.js";
 import { registerSokosumiCoworkerTools } from "../../src/tools/registerSokosumiCoworkerTools.js";
+import {
+  isSokosumiEventOrigin,
+  isSokosumiTaskEventStatus,
+  normalizeSokosumiTaskStatus,
+  type SokosumiEventOrigin,
+  type SokosumiTaskEvent,
+  type SokosumiTaskEventStatus,
+  type SokosumiTaskSnapshot
+} from "../../src/client/types.js";
+import { isRecord } from "../../src/sharedTypes.js";
 
-export default function sokosumiExtension(pi: PiExtensionAPI) {
+export type SokosumiExtensionMode = "api" | "disabled";
+export type SokosumiExtensionPollerMode = "claim" | "complete";
+
+export type SokosumiExtensionConfig = {
+  extensionMode: SokosumiExtensionMode;
+  apiUrl: string;
+  coworkerApiKey: string;
+  pollerEnabled: boolean;
+  pollIntervalMs: number;
+  pollLimit: number;
+  pollMaxPages: number;
+  readyStatuses: SokosumiTaskEventStatus[];
+  skipExistingProgress: boolean;
+  pollerMode: SokosumiExtensionPollerMode;
+  claimEnabled: boolean;
+  claimStatus: SokosumiTaskEventStatus;
+  completeStatus: SokosumiTaskEventStatus;
+  failStatus: SokosumiTaskEventStatus;
+  origin: SokosumiEventOrigin;
+  claimComment: string;
+  completeComment: string;
+  failComment: string;
+};
+
+export type SokosumiExtension = (pi: PiExtensionAPI) => void;
+
+export default function sokosumiExtension(pi: PiExtensionAPI): void {
   const config = loadConfig();
 
   pi.on("session_start", async (_event, ctx) => {
@@ -37,7 +72,7 @@ export default function sokosumiExtension(pi: PiExtensionAPI) {
       maxPages: config.pollMaxPages,
       shouldProcessEvent: usesDefaultReadyStatuses(config.readyStatuses)
         ? undefined
-        : (event) => config.readyStatuses.includes(event.status) && Boolean(event.taskId),
+        : (event) => config.readyStatuses.some((status) => status === event.status) && Boolean(event.taskId),
       hasTaskProgress: config.skipExistingProgress ? undefined : () => false,
       createRunningEvent: config.claimEnabled
         ? ({ event, task }) => ({
@@ -62,7 +97,7 @@ export default function sokosumiExtension(pi: PiExtensionAPI) {
   }
 }
 
-function loadConfig() {
+function loadConfig(): SokosumiExtensionConfig {
   const coworkerApiKey = readEnv("SOKOSUMI_COWORKER_API_KEY");
 
   return {
@@ -73,14 +108,14 @@ function loadConfig() {
     pollIntervalMs: parsePositiveInteger(readEnv("SOKOSUMI_TASK_POLL_INTERVAL_MS"), 15000),
     pollLimit: parsePositiveInteger(readEnv("SOKOSUMI_TASK_POLL_LIMIT"), 20),
     pollMaxPages: parsePositiveInteger(readEnv("SOKOSUMI_TASK_POLL_MAX_PAGES"), 10),
-    readyStatuses: parseList(readEnv("SOKOSUMI_TASK_POLLER_READY_STATUSES") || "READY"),
+    readyStatuses: parseStatusList(readEnv("SOKOSUMI_TASK_POLLER_READY_STATUSES") || "READY", ["READY"]),
     skipExistingProgress: readEnv("SOKOSUMI_TASK_POLLER_SKIP_EXISTING_PROGRESS") !== "false",
     pollerMode: normalizePollerMode(readEnv("SOKOSUMI_TASK_POLLER_MODE")),
     claimEnabled: readEnv("SOKOSUMI_TASK_POLLER_CLAIM_ENABLED") !== "false",
-    claimStatus: readEnv("SOKOSUMI_TASK_POLLER_CLAIM_STATUS") || "RUNNING",
-    completeStatus: readEnv("SOKOSUMI_TASK_POLLER_COMPLETE_STATUS") || "COMPLETED",
-    failStatus: readEnv("SOKOSUMI_TASK_POLLER_FAIL_STATUS") || "FAILED",
-    origin: readEnv("SOKOSUMI_TASK_POLLER_ORIGIN") || "SOKOSUMI",
+    claimStatus: readTaskEventStatus("SOKOSUMI_TASK_POLLER_CLAIM_STATUS", "RUNNING"),
+    completeStatus: readTaskEventStatus("SOKOSUMI_TASK_POLLER_COMPLETE_STATUS", "COMPLETED"),
+    failStatus: readTaskEventStatus("SOKOSUMI_TASK_POLLER_FAIL_STATUS", "FAILED"),
+    origin: readEventOrigin("SOKOSUMI_TASK_POLLER_ORIGIN", "SOKOSUMI"),
     claimComment: readEnv("SOKOSUMI_TASK_POLLER_CLAIM_COMMENT") || "The coworker picked up this task.",
     completeComment:
       readEnv("SOKOSUMI_TASK_POLLER_COMPLETE_COMMENT") ||
@@ -91,42 +126,73 @@ function loadConfig() {
   };
 }
 
-function readEnv(name: string) {
+function readEnv(name: string): string {
   return globalThis.process?.env?.[name] || "";
 }
 
-function parsePositiveInteger(value: string, fallback: number) {
+function parsePositiveInteger(value: string, fallback: number): number {
   if (!value) return fallback;
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function parseList(value: string) {
+function parseList(value: string): string[] {
   return value
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
 }
 
-function normalizePollerMode(value: string) {
+function parseStatusList(value: string, fallback: SokosumiTaskEventStatus[]): SokosumiTaskEventStatus[] {
+  const statuses = parseList(value)
+    .map(normalizeSokosumiTaskStatus)
+    .filter(isSokosumiTaskEventStatus);
+  return statuses.length ? statuses : fallback;
+}
+
+function readTaskEventStatus(name: string, fallback: SokosumiTaskEventStatus): SokosumiTaskEventStatus {
+  const value = normalizeSokosumiTaskStatus(readEnv(name));
+  return isSokosumiTaskEventStatus(value) ? value : fallback;
+}
+
+function readEventOrigin(name: string, fallback: SokosumiEventOrigin): SokosumiEventOrigin {
+  const value = readEnv(name).trim().toUpperCase();
+  return isSokosumiEventOrigin(value) ? value : fallback;
+}
+
+function normalizePollerMode(value: string): SokosumiExtensionPollerMode {
   return value === "complete" ? "complete" : "claim";
 }
 
-function usesDefaultReadyStatuses(values: string[]) {
+function usesDefaultReadyStatuses(values: SokosumiTaskEventStatus[]): boolean {
   return values.length === 1 && values[0] === "READY";
 }
 
-function renderTemplate(template: string, values: { event?: any; task?: any; error?: any }) {
+function renderTemplate(
+  template: string,
+  values: { event?: SokosumiTaskEvent; task?: SokosumiTaskSnapshot; error?: unknown }
+): string {
   return template.replace(/\{([^}]+)\}/g, (_match, path) => {
     const value = getPath(values, path);
     return value == null ? "" : String(value);
   });
 }
 
-function getPath(source: any, path: string) {
-  return path.split(".").reduce((value, key) => value?.[key], source);
+function getPath(source: unknown, path: string): unknown {
+  return path.split(".").reduce<unknown>((value, key) => isRecord(value) ? value[key] : undefined, source);
 }
 
-function logExtensionError(event: string, details = {}) {
+function logExtensionError(event: string, details: Record<string, unknown> = {}): void {
   console.error(JSON.stringify({ event, ...details }));
 }
+
+export type {
+  PiExtensionAPI,
+  PiExtensionEventContext,
+  PiExtensionEventHandler,
+  PiNotificationLevel,
+  PiToolContent,
+  PiToolDefinition,
+  PiToolRegistrationAPI,
+  PiToolResult
+} from "../../src/piTypes.js";

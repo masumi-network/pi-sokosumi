@@ -8,7 +8,7 @@ export function registerSokosumiCoworkerTools(pi, client) {
         label: "Get Current Sokosumi Coworker",
         description: "Get the authenticated Sokosumi coworker profile for this agent.",
         parameters: Type.Object({}),
-        async execute() {
+        async execute(_toolCallId, _params) {
             return createJsonToolResult(await client.getCurrentCoworker());
         }
     });

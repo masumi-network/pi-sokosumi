@@ -82,8 +82,9 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "check": "pnpm typecheck && pnpm test",
+    "check": "pnpm typecheck && pnpm test && tsc -p tsconfig.type-tests.json",
     "test": "pnpm build && node --test dist/tests/*.test.js",
+    "test:types": "pnpm build && tsc -p tsconfig.type-tests.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "pnpm build"
   },

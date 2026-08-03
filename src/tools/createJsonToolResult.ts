@@ -1,6 +1,6 @@
 import type { PiToolResult } from "../piTypes.js";
 
-export function createJsonToolResult(details: unknown): PiToolResult {
+export function createJsonToolResult<TDetails>(details: TDetails): PiToolResult<TDetails> {
   return {
     content: [
       {

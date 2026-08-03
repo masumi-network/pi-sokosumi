@@ -1,17 +1,18 @@
-// @ts-nocheck
 import { SOKOSUMI_TASK_EVENT_STATUS, normalizeSokosumiTaskStatus } from "../client/types.js";
+import { isRecord } from "../sharedTypes.js";
 import { canonicalJson, createSokosumiMasumiPaymentPayload, normalizeMasumiCostCents, normalizeMasumiRawUnits, sha256Hex } from "./masumiPaymentClient.js";
 export function createMasumiCompletionHooks({ enabled = true, masumiClient, store, calculateCostCents, createPaymentMetadata, logger = console } = {}) {
     return {
-        async beforeTaskEventCreated(input = {}) {
-            const taskEvent = input.taskEvent || {};
+        async beforeTaskEventCreated(input) {
+            const taskEvent = input.taskEvent;
+            assertMasumiCompatibleTaskEvent(taskEvent);
             if (!enabled || !masumiClient)
                 return taskEvent;
             if (!isCompletedTaskEvent(taskEvent) || taskEvent.masumiPayment)
                 return taskEvent;
             const costResult = calculateCostCents
                 ? await calculateCostCents(input)
-                : { costCents: taskEvent.credits || taskEvent.metadata?.credits || 1 };
+                : { costCents: taskEvent.credits || metadataCredits(taskEvent.metadata) || 1 };
             const costCents = resolveCostCents(costResult);
             if (!costCents)
                 return taskEvent;
@@ -33,15 +34,15 @@ export function createMasumiCompletionHooks({ enabled = true, masumiClient, stor
                 paymentId: masumiPayment.id,
                 blockchainIdentifier: masumiPayment.blockchainIdentifier,
                 costCents: costCents.toString(),
-                amountRawUnits: amountRawUnits?.toString?.() || ""
+                amountRawUnits: amountRawUnits?.toString() || ""
             });
             return {
                 ...taskEvent,
                 masumiPayment
             };
         },
-        async afterTaskEventCreated(input = {}) {
-            const taskEvent = input.taskEvent || {};
+        async afterTaskEventCreated(input) {
+            const taskEvent = input.taskEvent;
             const masumiPayment = taskEvent.masumiPayment;
             if (!enabled || !masumiPayment)
                 return undefined;
@@ -54,7 +55,7 @@ export function createMasumiCompletionHooks({ enabled = true, masumiClient, stor
             }
             const resultHash = sha256Hex(canonicalJson(taskEvent));
             const record = await store.recordPendingMasumiPayment({
-                taskId: input.taskId || input.task?.id || input.event?.taskId,
+                taskId: input.taskId || input.task?.id || input.event?.taskId || "",
                 triggerEventId: input.event?.id || "",
                 taskEventId: input.createdTaskEvent?.id || "",
                 paymentId: masumiPayment.id,
@@ -81,32 +82,55 @@ export function createMasumiCompletionHooks({ enabled = true, masumiClient, stor
         }
     };
 }
-function isCompletedTaskEvent(taskEvent = {}) {
+function isCompletedTaskEvent(taskEvent) {
     return normalizeSokosumiTaskStatus(taskEvent.status) === SOKOSUMI_TASK_EVENT_STATUS.COMPLETED;
 }
 function resolveCostCents(value) {
-    const raw = value && typeof value === "object" && !Array.isArray(value)
+    const raw = isRecord(value)
         ? value.costCents ?? value.credits ?? value.totalCredits
         : value;
     if (raw === false || raw === null || raw === undefined || raw === "")
         return null;
+    if (!isMasumiAmountInput(raw))
+        return null;
     return normalizeMasumiCostCents(raw);
 }
 function resolveAmountRawUnits(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value))
+    if (!isRecord(value))
         return null;
     const raw = value.amountRawUnits ?? value.rawAmount;
     if (raw === false || raw === null || raw === undefined || raw === "")
         return null;
+    if (!isMasumiAmountInput(raw))
+        return null;
     return normalizeMasumiRawUnits(raw);
 }
-function createDefaultPaymentMetadata({ taskId, task, event, taskEvent, costCents } = {}) {
+function createDefaultPaymentMetadata({ taskId, task, event, taskEvent, costCents }) {
     return {
         taskId: taskId || task?.id || event?.taskId || "",
         triggerEventId: event?.id || "",
         credits: Number(costCents),
         taskEventStatus: taskEvent?.status || ""
     };
+}
+function metadataCredits(value) {
+    return isRecord(value) ? value.credits : undefined;
+}
+function assertMasumiCompatibleTaskEvent(taskEvent) {
+    const payment = taskEvent.masumiPayment;
+    if (payment === undefined || payment === null)
+        return;
+    if (!isRecord(payment) ||
+        typeof payment.id !== "string" ||
+        typeof payment.blockchainIdentifier !== "string" ||
+        typeof payment.agentIdentifier !== "string" ||
+        !Array.isArray(payment.Amounts) ||
+        !isRecord(payment.PaymentSource)) {
+        throw new Error("Masumi completion task event contains an invalid masumiPayment payload.");
+    }
+}
+function isMasumiAmountInput(value) {
+    return typeof value === "number" || typeof value === "string" || typeof value === "bigint";
 }
 function normalizeRequiredText(value, label) {
     const text = String(value || "").trim();
