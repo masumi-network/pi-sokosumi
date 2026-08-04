@@ -1,0 +1,30 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "strict": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@masumi-network/pi-sokosumi": ["./dist/extensions/sokosumi/index.d.ts"],
+      "@masumi-network/pi-sokosumi/extension": ["./dist/extensions/sokosumi/index.d.ts"],
+      "@masumi-network/pi-sokosumi/client": ["./dist/src/client/httpSokosumiClient.d.ts"],
+      "@masumi-network/pi-sokosumi/types": ["./dist/src/client/types.d.ts"],
+      "@masumi-network/pi-sokosumi/identity": ["./dist/src/identity/resolveSokosumiIdentity.d.ts"],
+      "@masumi-network/pi-sokosumi/tools": ["./dist/src/tools/index.d.ts"],
+      "@masumi-network/pi-sokosumi/chat": ["./dist/src/chat/createPiAgentChatServer.d.ts"],
+      "@masumi-network/pi-sokosumi/masumi": ["./dist/src/masumi/index.d.ts"],
+      "@masumi-network/pi-sokosumi/poller": ["./dist/src/poller/createSokosumiTaskPoller.d.ts"],
+      "@masumi-network/pi-sokosumi/worker": ["./dist/src/worker/startSokosumiAgentWorker.d.ts"],
+      "@masumi-network/pi-sokosumi/mock-client": ["./dist/src/client/mockSokosumiClient.d.ts"]
+    }
+  },
+  "include": [
+    "type-tests/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules"
+  ]
+}

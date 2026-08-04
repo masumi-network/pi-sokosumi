@@ -1,6 +1,8 @@
 import { createHttpSokosumiClient } from "../../src/client/httpSokosumiClient.js";
 import { createSokosumiTaskPoller } from "../../src/poller/createSokosumiTaskPoller.js";
 import { registerSokosumiCoworkerTools } from "../../src/tools/registerSokosumiCoworkerTools.js";
+import { isSokosumiEventOrigin, isSokosumiTaskEventStatus, normalizeSokosumiTaskStatus } from "../../src/client/types.js";
+import { isRecord } from "../../src/sharedTypes.js";
 export default function sokosumiExtension(pi) {
     const config = loadConfig();
     pi.on("session_start", async (_event, ctx) => {
@@ -29,7 +31,7 @@ export default function sokosumiExtension(pi) {
             maxPages: config.pollMaxPages,
             shouldProcessEvent: usesDefaultReadyStatuses(config.readyStatuses)
                 ? undefined
-                : (event) => config.readyStatuses.includes(event.status) && Boolean(event.taskId),
+                : (event) => config.readyStatuses.some((status) => status === event.status) && Boolean(event.taskId),
             hasTaskProgress: config.skipExistingProgress ? undefined : () => false,
             createRunningEvent: config.claimEnabled
                 ? ({ event, task }) => ({
@@ -63,14 +65,14 @@ function loadConfig() {
         pollIntervalMs: parsePositiveInteger(readEnv("SOKOSUMI_TASK_POLL_INTERVAL_MS"), 15000),
         pollLimit: parsePositiveInteger(readEnv("SOKOSUMI_TASK_POLL_LIMIT"), 20),
         pollMaxPages: parsePositiveInteger(readEnv("SOKOSUMI_TASK_POLL_MAX_PAGES"), 10),
-        readyStatuses: parseList(readEnv("SOKOSUMI_TASK_POLLER_READY_STATUSES") || "READY"),
+        readyStatuses: parseStatusList(readEnv("SOKOSUMI_TASK_POLLER_READY_STATUSES") || "READY", ["READY"]),
         skipExistingProgress: readEnv("SOKOSUMI_TASK_POLLER_SKIP_EXISTING_PROGRESS") !== "false",
         pollerMode: normalizePollerMode(readEnv("SOKOSUMI_TASK_POLLER_MODE")),
         claimEnabled: readEnv("SOKOSUMI_TASK_POLLER_CLAIM_ENABLED") !== "false",
-        claimStatus: readEnv("SOKOSUMI_TASK_POLLER_CLAIM_STATUS") || "RUNNING",
-        completeStatus: readEnv("SOKOSUMI_TASK_POLLER_COMPLETE_STATUS") || "COMPLETED",
-        failStatus: readEnv("SOKOSUMI_TASK_POLLER_FAIL_STATUS") || "FAILED",
-        origin: readEnv("SOKOSUMI_TASK_POLLER_ORIGIN") || "SOKOSUMI",
+        claimStatus: readTaskEventStatus("SOKOSUMI_TASK_POLLER_CLAIM_STATUS", "RUNNING"),
+        completeStatus: readTaskEventStatus("SOKOSUMI_TASK_POLLER_COMPLETE_STATUS", "COMPLETED"),
+        failStatus: readTaskEventStatus("SOKOSUMI_TASK_POLLER_FAIL_STATUS", "FAILED"),
+        origin: readEventOrigin("SOKOSUMI_TASK_POLLER_ORIGIN", "SOKOSUMI"),
         claimComment: readEnv("SOKOSUMI_TASK_POLLER_CLAIM_COMMENT") || "The coworker picked up this task.",
         completeComment: readEnv("SOKOSUMI_TASK_POLLER_COMPLETE_COMMENT") ||
             "The coworker processed this task: {task.name}",
@@ -93,6 +95,20 @@ function parseList(value) {
         .map((item) => item.trim())
         .filter(Boolean);
 }
+function parseStatusList(value, fallback) {
+    const statuses = parseList(value)
+        .map(normalizeSokosumiTaskStatus)
+        .filter(isSokosumiTaskEventStatus);
+    return statuses.length ? statuses : fallback;
+}
+function readTaskEventStatus(name, fallback) {
+    const value = normalizeSokosumiTaskStatus(readEnv(name));
+    return isSokosumiTaskEventStatus(value) && value !== "AUTHENTICATION_REQUIRED" ? value : fallback;
+}
+function readEventOrigin(name, fallback) {
+    const value = readEnv(name).trim().toUpperCase();
+    return isSokosumiEventOrigin(value) ? value : fallback;
+}
 function normalizePollerMode(value) {
     return value === "complete" ? "complete" : "claim";
 }
@@ -106,7 +122,7 @@ function renderTemplate(template, values) {
     });
 }
 function getPath(source, path) {
-    return path.split(".").reduce((value, key) => value?.[key], source);
+    return path.split(".").reduce((value, key) => isRecord(value) ? value[key] : undefined, source);
 }
 function logExtensionError(event, details = {}) {
     console.error(JSON.stringify({ event, ...details }));

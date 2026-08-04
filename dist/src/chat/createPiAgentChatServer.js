@@ -1,5 +1,6 @@
 import http from "node:http";
 import { extractSokosumiIdentityMetadata } from "../identity/resolveSokosumiIdentity.js";
+import { firstText, getPathValue, getProperty, getRecordProperty, isRecord, normalizeText } from "../sharedTypes.js";
 export class PiAgentChatRequestError extends Error {
     statusCode;
     constructor(message, statusCode = 400) {
@@ -9,40 +10,44 @@ export class PiAgentChatRequestError extends Error {
     }
 }
 export function normalizePiAgentChatRequest({ body = {}, headers = {}, agentId, surface, defaultAgentId, defaultSurface = "chat", supportedAgentIds, supportedSurfaces, metadata = {} } = {}) {
-    const normalizedAgentId = normalizeIdentifier(firstString(agentId, body?.agentId, body?.agent_id, body?.coworker, body?.metadata?.agentId, body?.metadata?.coworker, defaultAgentId));
+    const payload = isRecord(body) ? body : {};
+    const bodyMetadata = getRecordProperty(payload, "metadata");
+    const normalizedAgentId = normalizeIdentifier(firstText(agentId, getProperty(payload, "agentId"), getProperty(payload, "agent_id"), getProperty(payload, "coworker"), getProperty(bodyMetadata, "agentId"), getProperty(bodyMetadata, "coworker"), defaultAgentId));
     if (supportedAgentIds?.length) {
         if (!normalizedAgentId || !includesIdentifier(supportedAgentIds, normalizedAgentId)) {
             throw new PiAgentChatRequestError("Unsupported agent for chat request.");
         }
     }
-    const normalizedSurface = normalizeIdentifier(firstString(surface, body?.surface, body?.interface, defaultSurface));
+    const normalizedSurface = normalizeIdentifier(firstText(surface, getProperty(payload, "surface"), getProperty(payload, "interface"), defaultSurface));
     if (!normalizedSurface) {
         throw new PiAgentChatRequestError("Chat request surface is required.");
     }
     if (!isSupportedSurface(normalizedSurface, normalizedAgentId, supportedSurfaces)) {
         throw new PiAgentChatRequestError(`Unsupported chat surface: ${normalizedSurface}.`);
     }
-    const identity = (extractSokosumiIdentityMetadata(body, headers) || {});
-    const organizationId = firstString(body?.organizationId, body?.organization_id, body?.workspaceId, body?.workspace_id, body?.metadata?.organizationId, identity.organizationId, identity.workspaceId, headerValue(headers, "x-organization-id"), headerValue(headers, "x-delegation-organization-id"));
-    const attachments = Array.isArray(body?.attachments)
-        ? body.attachments
-        : Array.isArray(body?.files)
-            ? body.files
+    const identity = extractSokosumiIdentityMetadata(payload, headers);
+    const organizationId = firstText(getProperty(payload, "organizationId"), getProperty(payload, "organization_id"), getProperty(payload, "workspaceId"), getProperty(payload, "workspace_id"), getProperty(bodyMetadata, "organizationId"), identity?.organizationId, identity?.workspaceId, headerValue(headers, "x-organization-id"), headerValue(headers, "x-delegation-organization-id"));
+    const attachmentsValue = getProperty(payload, "attachments");
+    const filesValue = getProperty(payload, "files");
+    const attachments = Array.isArray(attachmentsValue)
+        ? attachmentsValue
+        : Array.isArray(filesValue)
+            ? filesValue
             : undefined;
     return {
         ...(normalizedAgentId ? { agentId: normalizedAgentId } : {}),
         surface: normalizedSurface,
-        userId: firstString(body?.userId, body?.user_id, body?.senderId, body?.sender_id, body?.from?.id, body?.from?.email, body?.sender?.id, body?.sender?.email, body?.message?.from?.id, body?.message?.from?.email, body?.metadata?.userId, identity.userId, headerValue(headers, "x-user-id"), headerValue(headers, "x-delegation-user-id"), "anonymous"),
+        userId: firstText(getProperty(payload, "userId"), getProperty(payload, "user_id"), getProperty(payload, "senderId"), getProperty(payload, "sender_id"), getPathValue(payload, "from", "id"), getPathValue(payload, "from", "email"), getPathValue(payload, "sender", "id"), getPathValue(payload, "sender", "email"), getPathValue(payload, "message", "from", "id"), getPathValue(payload, "message", "from", "email"), getProperty(bodyMetadata, "userId"), identity?.userId, headerValue(headers, "x-user-id"), headerValue(headers, "x-delegation-user-id"), "anonymous") || "anonymous",
         ...(organizationId ? { organizationId } : {}),
-        message: extractMessage(body),
+        message: extractMessage(payload),
         ...(attachments ? { attachments } : {}),
         metadata: {
-            ...(body?.metadata && typeof body.metadata === "object" ? body.metadata : {}),
+            ...(bodyMetadata || {}),
             ...metadata,
-            ...(Object.keys(identity).length ? { identity } : {}),
-            sourcePayloadType: detectPayloadType(body),
+            ...(identity ? { identity } : {}),
+            sourcePayloadType: detectPayloadType(payload),
             routeSurface: normalizedSurface,
-            sourcePayload: sanitizePayload(body)
+            sourcePayload: sanitizePayload(payload)
         }
     };
 }
@@ -80,7 +85,7 @@ export function createPiAgentChatRouteHandler(options) {
         }
         catch (error) {
             await options.onError?.({ error, req, res, body });
-            sendJson(res, getStatusCode(error), { error: error?.message || "Internal server error" });
+            sendJson(res, getStatusCode(error), { error: getErrorMessage(error) });
         }
         return true;
     };
@@ -141,12 +146,20 @@ function sendJson(res, statusCode, body) {
     res.end(`${JSON.stringify(body)}\n`);
 }
 function getStatusCode(error) {
-    const statusCode = Number(error?.statusCode || error?.status || 500);
+    const source = isRecord(error) ? error : {};
+    const statusCode = Number(source.statusCode || source.status || 500);
     return Number.isInteger(statusCode) && statusCode >= 400 && statusCode <= 599 ? statusCode : 500;
 }
+function getErrorMessage(error) {
+    if (error instanceof Error && error.message)
+        return error.message;
+    if (isRecord(error) && typeof error.message === "string" && error.message)
+        return error.message;
+    return "Internal server error";
+}
 function extractMessage(body) {
-    const message = firstString(body?.message, body?.text, body?.content, body?.body, body?.comment, body?.description, body?.prompt, body?.input, body?.message?.text, body?.message?.body, body?.message?.content, body?.email?.text, body?.email?.body, body?.comment?.body, body?.issue?.body, body?.issue?.title, body?.pull_request?.body, body?.pull_request?.title, body?.tweet?.text, body?.post?.text, getLastMessageText(body?.messages));
-    return String(message || "").trim();
+    const message = firstText(getProperty(body, "message"), getProperty(body, "text"), getProperty(body, "content"), getProperty(body, "body"), getProperty(body, "comment"), getProperty(body, "description"), getProperty(body, "prompt"), getProperty(body, "input"), getPathValue(body, "message", "text"), getPathValue(body, "message", "body"), getPathValue(body, "message", "content"), getPathValue(body, "email", "text"), getPathValue(body, "email", "body"), getPathValue(body, "comment", "body"), getPathValue(body, "issue", "body"), getPathValue(body, "issue", "title"), getPathValue(body, "pull_request", "body"), getPathValue(body, "pull_request", "title"), getPathValue(body, "tweet", "text"), getPathValue(body, "post", "text"), getLastMessageText(getProperty(body, "messages")));
+    return normalizeText(message);
 }
 function getLastMessageText(messages) {
     if (!Array.isArray(messages))
@@ -161,32 +174,31 @@ function getLastMessageText(messages) {
 function getMessageText(message) {
     if (typeof message === "string")
         return message;
-    if (!message || typeof message !== "object")
+    if (!isRecord(message))
         return undefined;
-    const value = message;
-    if (typeof value.content === "string")
-        return value.content;
-    if (typeof value.text === "string")
-        return value.text;
-    if (typeof value.body === "string")
-        return value.body;
-    if (Array.isArray(value.content)) {
-        return value.content
-            .map((part) => typeof part === "string" ? part : firstString(part?.text, part?.content))
-            .filter(Boolean)
+    if (typeof message.content === "string")
+        return message.content;
+    if (typeof message.text === "string")
+        return message.text;
+    if (typeof message.body === "string")
+        return message.body;
+    if (Array.isArray(message.content)) {
+        return message.content
+            .map((part) => typeof part === "string" ? part : firstText(getPathValue(part, "text"), getPathValue(part, "content")))
+            .filter((part) => Boolean(part))
             .join("\n")
             .trim() || undefined;
     }
     return undefined;
 }
 function detectPayloadType(body) {
-    if (body?.issue || body?.pull_request)
+    if (body.issue || body.pull_request)
         return "github";
-    if (body?.tweet || body?.post)
+    if (body.tweet || body.post)
         return "social";
-    if (body?.email)
+    if (body.email)
         return "email";
-    if (body?.message || body?.messages)
+    if (body.message || body.messages)
         return "message";
     return "chat";
 }
@@ -197,7 +209,7 @@ function sanitizePayload(value, depth = 0) {
         return value;
     if (Array.isArray(value))
         return value.slice(0, 20).map((item) => sanitizePayload(item, depth + 1));
-    if (typeof value !== "object")
+    if (!isRecord(value))
         return String(value);
     const result = {};
     for (const [key, child] of Object.entries(value)) {
@@ -212,28 +224,23 @@ function sanitizePayload(value, depth = 0) {
 function isSupportedSurface(surface, agentId, supportedSurfaces) {
     if (!supportedSurfaces)
         return true;
-    if (Array.isArray(supportedSurfaces))
+    if (isSupportedSurfaceList(supportedSurfaces))
         return includesIdentifier(supportedSurfaces, surface);
     if (!agentId)
         return false;
-    const values = supportedSurfaces[agentId] || supportedSurfaces[agentId.toLowerCase()];
+    const surfaceMap = supportedSurfaces;
+    const values = surfaceMap[agentId] || surfaceMap[agentId.toLowerCase()];
     return Array.isArray(values) && includesIdentifier(values, surface);
+}
+function isSupportedSurfaceList(value) {
+    return Array.isArray(value);
 }
 function includesIdentifier(values, value) {
     return values.map((item) => normalizeIdentifier(item)).includes(value);
 }
 function normalizeIdentifier(value) {
-    const text = firstString(value);
+    const text = firstText(value);
     return text ? text.toLowerCase() : undefined;
-}
-function firstString(...values) {
-    for (const value of values) {
-        if (typeof value === "string" && value.trim())
-            return value.trim();
-        if (typeof value === "number" && Number.isFinite(value))
-            return String(value);
-    }
-    return undefined;
 }
 function headerValue(headers, name) {
     const value = headers[name] || headers[name.toLowerCase()];

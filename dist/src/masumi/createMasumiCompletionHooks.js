@@ -1,17 +1,21 @@
-// @ts-nocheck
 import { SOKOSUMI_TASK_EVENT_STATUS, normalizeSokosumiTaskStatus } from "../client/types.js";
-import { canonicalJson, createSokosumiMasumiPaymentPayload, normalizeMasumiCostCents, normalizeMasumiRawUnits, sha256Hex } from "./masumiPaymentClient.js";
+import { isRecord, normalizeText } from "../sharedTypes.js";
+import { canonicalJson, normalizeMasumiCostCents, normalizeMasumiRawUnits, sha256Hex } from "./masumiPaymentClient.js";
+import { createSokosumiMasumiPaymentPayload } from "./sokosumiMasumiPaymentPayload.js";
 export function createMasumiCompletionHooks({ enabled = true, masumiClient, store, calculateCostCents, createPaymentMetadata, logger = console } = {}) {
     return {
-        async beforeTaskEventCreated(input = {}) {
-            const taskEvent = input.taskEvent || {};
+        async beforeTaskEventCreated(input) {
+            const taskEvent = input.taskEvent;
             if (!enabled || !masumiClient)
                 return taskEvent;
-            if (!isCompletedTaskEvent(taskEvent) || taskEvent.masumiPayment)
+            if (!isCompletedTaskEvent(taskEvent))
                 return taskEvent;
+            if (taskEvent.masumiPayment) {
+                return attachMasumiPayment(taskEvent, createSokosumiMasumiPaymentPayload(taskEvent.masumiPayment));
+            }
             const costResult = calculateCostCents
                 ? await calculateCostCents(input)
-                : { costCents: taskEvent.credits || taskEvent.metadata?.credits || 1 };
+                : { costCents: taskEvent.credits || metadataCredits(taskEvent.metadata) || 1 };
             const costCents = resolveCostCents(costResult);
             if (!costCents)
                 return taskEvent;
@@ -30,21 +34,19 @@ export function createMasumiCompletionHooks({ enabled = true, masumiClient, stor
             log(logger, "masumi_payment_created_for_completion", {
                 taskId,
                 triggerEventId: input.event?.id || "",
-                paymentId: masumiPayment.id,
+                paymentId: masumiPayment.id || "",
                 blockchainIdentifier: masumiPayment.blockchainIdentifier,
                 costCents: costCents.toString(),
-                amountRawUnits: amountRawUnits?.toString?.() || ""
+                amountRawUnits: amountRawUnits?.toString() || ""
             });
-            return {
-                ...taskEvent,
-                masumiPayment
-            };
+            return attachMasumiPayment(taskEvent, masumiPayment);
         },
-        async afterTaskEventCreated(input = {}) {
-            const taskEvent = input.taskEvent || {};
-            const masumiPayment = taskEvent.masumiPayment;
-            if (!enabled || !masumiPayment)
+        async afterTaskEventCreated(input) {
+            const taskEvent = input.taskEvent;
+            const payment = taskEvent.masumiPayment;
+            if (!enabled || !payment)
                 return undefined;
+            const masumiPayment = createSokosumiMasumiPaymentPayload(payment);
             if (!store?.recordPendingMasumiPayment) {
                 log(logger, "masumi_pending_payment_store_unavailable", {
                     taskId: input.taskId || input.task?.id || input.event?.taskId || "",
@@ -54,10 +56,10 @@ export function createMasumiCompletionHooks({ enabled = true, masumiClient, stor
             }
             const resultHash = sha256Hex(canonicalJson(taskEvent));
             const record = await store.recordPendingMasumiPayment({
-                taskId: input.taskId || input.task?.id || input.event?.taskId,
+                taskId: input.taskId || input.task?.id || input.event?.taskId || "",
                 triggerEventId: input.event?.id || "",
                 taskEventId: input.createdTaskEvent?.id || "",
-                paymentId: masumiPayment.id,
+                ...(masumiPayment.id ? { paymentId: masumiPayment.id } : {}),
                 blockchainIdentifier: masumiPayment.blockchainIdentifier,
                 agentIdentifier: masumiPayment.agentIdentifier,
                 network: masumiPayment.PaymentSource?.network,
@@ -81,26 +83,37 @@ export function createMasumiCompletionHooks({ enabled = true, masumiClient, stor
         }
     };
 }
-function isCompletedTaskEvent(taskEvent = {}) {
+function attachMasumiPayment(taskEvent, masumiPayment) {
+    const { credits: _credits, ...taskEventWithoutDirectCredits } = taskEvent;
+    return {
+        ...taskEventWithoutDirectCredits,
+        masumiPayment
+    };
+}
+function isCompletedTaskEvent(taskEvent) {
     return normalizeSokosumiTaskStatus(taskEvent.status) === SOKOSUMI_TASK_EVENT_STATUS.COMPLETED;
 }
 function resolveCostCents(value) {
-    const raw = value && typeof value === "object" && !Array.isArray(value)
+    const raw = isRecord(value)
         ? value.costCents ?? value.credits ?? value.totalCredits
         : value;
     if (raw === false || raw === null || raw === undefined || raw === "")
         return null;
+    if (!isMasumiAmountInput(raw))
+        return null;
     return normalizeMasumiCostCents(raw);
 }
 function resolveAmountRawUnits(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value))
+    if (!isRecord(value))
         return null;
     const raw = value.amountRawUnits ?? value.rawAmount;
     if (raw === false || raw === null || raw === undefined || raw === "")
         return null;
+    if (!isMasumiAmountInput(raw))
+        return null;
     return normalizeMasumiRawUnits(raw);
 }
-function createDefaultPaymentMetadata({ taskId, task, event, taskEvent, costCents } = {}) {
+function createDefaultPaymentMetadata({ taskId, task, event, taskEvent, costCents }) {
     return {
         taskId: taskId || task?.id || event?.taskId || "",
         triggerEventId: event?.id || "",
@@ -108,8 +121,14 @@ function createDefaultPaymentMetadata({ taskId, task, event, taskEvent, costCent
         taskEventStatus: taskEvent?.status || ""
     };
 }
+function metadataCredits(value) {
+    return isRecord(value) ? value.credits : undefined;
+}
+function isMasumiAmountInput(value) {
+    return typeof value === "number" || typeof value === "string" || typeof value === "bigint";
+}
 function normalizeRequiredText(value, label) {
-    const text = String(value || "").trim();
+    const text = normalizeText(value);
     if (!text)
         throw new Error(`Masumi completion payment requires ${label}.`);
     return text;

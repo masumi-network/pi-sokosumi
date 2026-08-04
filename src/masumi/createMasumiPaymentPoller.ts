@@ -1,15 +1,110 @@
-// @ts-nocheck
+import type { SokosumiLogger } from "../sharedTypes.js";
+import { getErrorMessage } from "../sharedTypes.js";
+import type {
+  MasumiListPaymentsInput,
+  MasumiNetwork,
+  MasumiOnChainState,
+  MasumiPaymentAction,
+  MasumiPaymentErrorType,
+  MasumiSubmitResultInput,
+  MasumiSubmitResultResponse
+} from "./masumiPaymentClient.js";
+import type {
+  ListPendingMasumiPaymentsInput,
+  MarkMasumiDroppedInput,
+  MarkMasumiSubmittedInput,
+  MasumiPendingPaymentRecord
+} from "./masumiPaymentStore.js";
 
-export function createMasumiPaymentPoller({
+export type MasumiPaymentPollerPayment = Record<string, unknown> & {
+  blockchainIdentifier: string;
+  NextAction?: Record<string, unknown> & {
+    requestedAction?: MasumiPaymentAction | null;
+    errorType?: MasumiPaymentErrorType | null;
+    errorNote?: string | null;
+    resultHash?: string | null;
+  };
+  onChainState?: MasumiOnChainState | null;
+  PaymentSource?: Record<string, unknown> & {
+    network?: MasumiNetwork;
+  };
+};
+
+export type MasumiPaymentPollerListPage = Record<string, unknown> & {
+  Payments?: MasumiPaymentPollerPayment[];
+};
+
+export type MasumiPaymentPollerListResult = MasumiPaymentPollerListPage | MasumiPaymentPollerPayment[];
+
+export type MasumiPaymentPollerClient = {
+  listPayments(input?: MasumiListPaymentsInput): Promise<MasumiPaymentPollerListResult>;
+  submitResult(input: MasumiSubmitResultInput): Promise<MasumiSubmitResultResponse>;
+};
+
+export type MasumiPaymentPollerStore<
+  TRecord extends MasumiPendingPaymentRecord = MasumiPendingPaymentRecord
+> = {
+  listPendingMasumiPayments(input?: ListPendingMasumiPaymentsInput): Promise<TRecord[]>;
+  markMasumiSubmitted(input: MarkMasumiSubmittedInput): Promise<TRecord>;
+  markMasumiDropped(input: MarkMasumiDroppedInput): Promise<TRecord>;
+};
+
+export type EnabledMasumiPaymentPollerOptions<
+  TRecord extends MasumiPendingPaymentRecord = MasumiPendingPaymentRecord
+> = {
+  enabled?: true;
+  client: MasumiPaymentPollerClient;
+  store: MasumiPaymentPollerStore<TRecord>;
+  intervalMs?: number;
+  limit?: number;
+  logger?: SokosumiLogger;
+};
+
+export type DisabledMasumiPaymentPollerOptions<
+  TRecord extends MasumiPendingPaymentRecord = MasumiPendingPaymentRecord
+> = {
+  enabled: false;
+  client?: MasumiPaymentPollerClient;
+  store?: MasumiPaymentPollerStore<TRecord>;
+  intervalMs?: number;
+  limit?: number;
+  logger?: SokosumiLogger;
+};
+
+export type MasumiPaymentPollerOptions<
+  TRecord extends MasumiPendingPaymentRecord = MasumiPendingPaymentRecord
+> = EnabledMasumiPaymentPollerOptions<TRecord> | DisabledMasumiPaymentPollerOptions<TRecord>;
+
+export type MasumiPaymentPoller = {
+  start(): void;
+  stop(): void;
+  tick(): Promise<void>;
+};
+
+type RuntimeMasumiPaymentPollerOptions<
+  TRecord extends MasumiPendingPaymentRecord
+> = {
+  enabled?: boolean;
+  client?: MasumiPaymentPollerClient;
+  store?: MasumiPaymentPollerStore<TRecord>;
+  intervalMs?: number;
+  limit?: number;
+  logger?: SokosumiLogger;
+};
+
+export function createMasumiPaymentPoller<TRecord extends MasumiPendingPaymentRecord = MasumiPendingPaymentRecord>(
+  options: MasumiPaymentPollerOptions<TRecord>
+): MasumiPaymentPoller;
+export function createMasumiPaymentPoller<TRecord extends MasumiPendingPaymentRecord = MasumiPendingPaymentRecord>({
   enabled = true,
   client,
   store,
   intervalMs = 15 * 60 * 1000,
   limit = 20,
   logger = console
-} = {}) {
+}: RuntimeMasumiPaymentPollerOptions<TRecord> = {}): MasumiPaymentPoller {
   let running = false;
-  let timer;
+  let timer: ReturnType<typeof setInterval> | undefined;
 
   return {
     start() {
@@ -39,21 +134,21 @@ export function createMasumiPaymentPoller({
     }
   };
 
-  async function tick() {
+  async function tick(): Promise<void> {
     if (!enabled || running) return;
     running = true;
 
     try {
       await processPendingPayments();
     } catch (error) {
-      log(logger, "masumi_payment_poller_error", { message: error.message }, "error");
+      log(logger, "masumi_payment_poller_error", { message: getErrorMessage(error) }, "error");
     } finally {
       running = false;
     }
   }
 
-  async function processPendingPayments() {
-    const pending = await store.listPendingMasumiPayments({ limit });
+  async function processPendingPayments(): Promise<void> {
+    const pending = await store!.listPendingMasumiPayments({ limit });
     if (!pending.length) return;
 
     for (const record of pending) {
@@ -63,13 +158,13 @@ export function createMasumiPaymentPoller({
         log(logger, "masumi_payment_record_error", {
           taskId: record.taskId,
           blockchainIdentifier: record.blockchainIdentifier,
-          message: error.message
+          message: getErrorMessage(error)
         }, "error");
       }
     }
   }
 
-  async function processPendingPayment(record) {
+  async function processPendingPayment(record: TRecord): Promise<void> {
     const payment = await findPayment(record);
     if (!payment) {
       log(logger, "masumi_payment_not_found", {
@@ -81,7 +176,7 @@ export function createMasumiPaymentPoller({
 
     const nextAction = payment.NextAction || {};
     if (nextAction.errorType) {
-      await store.markMasumiDropped({
+      await store!.markMasumiDropped({
         blockchainIdentifier: record.blockchainIdentifier,
         errorType: nextAction.errorType,
         errorNote: nextAction.errorNote || ""
@@ -105,12 +200,12 @@ export function createMasumiPaymentPoller({
       return;
     }
 
-    const response = await client.submitResult({
+    const response = await client!.submitResult({
       blockchainIdentifier: record.blockchainIdentifier,
       submitResultHash: record.resultHash,
       network: record.network || payment.PaymentSource?.network
     });
-    await store.markMasumiSubmitted({
+    await store!.markMasumiSubmitted({
       blockchainIdentifier: record.blockchainIdentifier,
       response
     });
@@ -121,21 +216,26 @@ export function createMasumiPaymentPoller({
     });
   }
 
-  async function findPayment(record) {
-    const result = await client.listPayments({
+  async function findPayment(record: TRecord): Promise<MasumiPaymentPollerPayment | undefined> {
+    const result = await client!.listPayments({
       limit: 100,
-      network: record.network
+      network: record.network || undefined
     });
-    const payments = Array.isArray(result?.Payments) ? result.Payments : Array.isArray(result) ? result : [];
-    return payments.find((payment) => payment?.blockchainIdentifier === record.blockchainIdentifier);
+    const payments = Array.isArray(result) ? result : Array.isArray(result.Payments) ? result.Payments : [];
+    return payments.find((payment) => payment.blockchainIdentifier === record.blockchainIdentifier);
   }
 }
 
-export function isReadyForSubmitResult(payment = {}) {
-  return payment?.NextAction?.requestedAction === "SubmitResultRequested" || payment?.onChainState === "FundsLocked";
+export function isReadyForSubmitResult(payment: MasumiPaymentPollerPayment): boolean {
+  return payment.NextAction?.requestedAction === "SubmitResultRequested" || payment.onChainState === "FundsLocked";
 }
 
-function log(logger, event, details = {}, level = "log") {
+function log(
+  logger: SokosumiLogger,
+  event: string,
+  details: Record<string, unknown> = {},
+  level: "log" | "warn" | "error" = "log"
+): void {
   const target = typeof logger?.[level] === "function" ? logger[level] : logger?.log;
   if (!target) return;
   target.call(logger, JSON.stringify({ event, ...details }));

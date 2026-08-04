@@ -1,4 +1,5 @@
-// @ts-nocheck
+import { isRecord, normalizeText } from "../sharedTypes.js";
+export const MASUMI_PAYMENT_SUBMIT_STATUSES = ["pending", "submitted", "dropped"];
 export function createMemoryMasumiPaymentStore() {
     const records = new Map();
     const startedAt = new Date().toISOString();
@@ -13,13 +14,13 @@ export function createMemoryMasumiPaymentStore() {
                 startedAt
             };
         },
-        async recordPendingMasumiPayment(input = {}) {
+        async recordPendingMasumiPayment(input) {
             const record = normalizePendingPayment(input);
-            const existing = records.get(record.blockchainIdentifier) || {};
+            const existing = records.get(record.blockchainIdentifier);
             const next = {
                 ...existing,
                 ...record,
-                createdAt: existing.createdAt || record.createdAt,
+                createdAt: existing?.createdAt || record.createdAt,
                 updatedAt: new Date().toISOString()
             };
             records.set(next.blockchainIdentifier, next);
@@ -32,7 +33,7 @@ export function createMemoryMasumiPaymentStore() {
                 .slice(0, normalizeLimit(limit, 20))
                 .map(sanitizeRecord);
         },
-        async markMasumiSubmitted(input = {}) {
+        async markMasumiSubmitted(input) {
             const record = getRecord(records, input);
             const now = new Date().toISOString();
             record.submitStatus = "submitted";
@@ -42,7 +43,7 @@ export function createMemoryMasumiPaymentStore() {
             records.set(record.blockchainIdentifier, record);
             return sanitizeRecord(record);
         },
-        async markMasumiDropped(input = {}) {
+        async markMasumiDropped(input) {
             const record = getRecord(records, input);
             const now = new Date().toISOString();
             record.submitStatus = "dropped";
@@ -55,10 +56,11 @@ export function createMemoryMasumiPaymentStore() {
         }
     };
 }
-export function normalizePendingPayment(input = {}) {
+export function normalizePendingPayment(input) {
     const now = new Date().toISOString();
     const masumiPayment = normalizeJsonObject(input.masumiPayment);
     const blockchainIdentifier = normalizeRequiredText(input.blockchainIdentifier || masumiPayment.blockchainIdentifier, "blockchainIdentifier");
+    const network = normalizeOptionalText(input.network || paymentSourceNetwork(masumiPayment));
     return {
         id: normalizeOptionalText(input.id || input.paymentId || masumiPayment.id) || `masumi_${blockchainIdentifier.slice(0, 24)}`,
         taskId: normalizeRequiredText(input.taskId, "taskId"),
@@ -67,7 +69,7 @@ export function normalizePendingPayment(input = {}) {
         paymentId: normalizeOptionalText(input.paymentId || masumiPayment.id),
         blockchainIdentifier,
         agentIdentifier: normalizeOptionalText(input.agentIdentifier || masumiPayment.agentIdentifier),
-        network: normalizeOptionalText(input.network || masumiPayment.PaymentSource?.network),
+        network: network === "Preprod" || network === "Mainnet" ? network : "",
         resultHash: normalizeRequiredText(input.resultHash, "resultHash"),
         submitStatus: normalizeSubmitStatus(input.submitStatus || "pending"),
         masumiPayment,
@@ -82,14 +84,14 @@ export function normalizePendingPayment(input = {}) {
         droppedAt: normalizeOptionalText(input.droppedAt)
     };
 }
-function getRecord(records, input = {}) {
+function getRecord(records, input) {
     const blockchainIdentifier = normalizeRequiredText(input.blockchainIdentifier, "blockchainIdentifier");
     const record = records.get(blockchainIdentifier);
     if (!record)
         throw new Error(`Masumi pending payment not found: ${blockchainIdentifier}`);
     return record;
 }
-function sanitizeRecord(record = {}) {
+function sanitizeRecord(record) {
     return {
         ...record,
         masumiPayment: normalizeJsonObject(record.masumiPayment),
@@ -99,15 +101,19 @@ function sanitizeRecord(record = {}) {
     };
 }
 function normalizeSubmitStatus(value) {
-    const text = String(value || "").trim().toLowerCase();
+    const text = normalizeText(value).toLowerCase();
     if (text === "submitted" || text === "dropped")
         return text;
     return "pending";
 }
 function normalizeJsonObject(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value))
+    if (!isRecord(value))
         return {};
     return { ...value };
+}
+function paymentSourceNetwork(payment) {
+    const source = payment.PaymentSource;
+    return isRecord(source) ? source.network : undefined;
 }
 function normalizeLimit(value, fallback) {
     const number = Number(value);

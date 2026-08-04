@@ -1,5 +1,5 @@
-// @ts-nocheck
 import { SOKOSUMI_TASK_EVENT_STATUS, isSokosumiCanceledTaskEventStatus, isSokosumiCoworkerProgressStatus, isSokosumiTerminalTaskEventStatus, normalizeSokosumiTaskStatus } from "../client/types.js";
+import { getErrorMessage } from "../sharedTypes.js";
 export function createSokosumiTaskPoller({ client, intervalMs = 15000, limit = 20, maxPages = 10, logger = console, shouldProcessEvent = defaultShouldProcessEvent, hasTaskProgress = defaultHasTaskProgress, createReopenedEvent = defaultCreateReopenedEvent, createRunningEvent = defaultCreateRunningEvent, createCanceledEvent = defaultCreateCanceledEvent, createCompletedEvent, createFailedEvent = defaultCreateFailedEvent, createStaleInputRequiredEvent, inputRequiredTimeoutMs = 0, now = () => new Date(), beforeTaskEventCreated, afterTaskEventCreated }) {
     const processedEventIds = new Set();
     const canceledTaskIds = new Set();
@@ -90,7 +90,7 @@ export function createSokosumiTaskPoller({ client, intervalMs = 15000, limit = 2
             ...new Set(events
                 .filter((event) => event?.id && !processedEventIds.has(event.id))
                 .map((event) => event?.taskId)
-                .filter(Boolean))
+                .filter((taskId) => typeof taskId === "string" && Boolean(taskId)))
         ];
         for (const taskId of taskIds) {
             try {
@@ -296,7 +296,7 @@ export function createSokosumiTaskPoller({ client, intervalMs = 15000, limit = 2
         const taskIds = [
             ...new Set(events
                 .map((event) => event?.taskId)
-                .filter(Boolean))
+                .filter((taskId) => typeof taskId === "string" && Boolean(taskId)))
         ];
         for (const taskId of taskIds) {
             if (completedStaleInputRequiredTaskIds.has(taskId))
@@ -407,7 +407,7 @@ function defaultHasTaskProgress(task, triggerEvent) {
     });
 }
 function isCoworkerProgressStatus(status) {
-    return isSokosumiCoworkerProgressStatus(status);
+    return isSokosumiCoworkerProgressStatus(normalizeStatus(status));
 }
 function shouldCreateCommentOnlyEvent(task, triggerEvent) {
     if (isTerminalTaskProgress(task?.status))
@@ -434,7 +434,7 @@ function isCommentOnlyCoworkerProgressEvent(event) {
     return hasUserEventPayload(event);
 }
 function isTerminalTaskProgress(status) {
-    return isSokosumiTerminalTaskEventStatus(status);
+    return isSokosumiTerminalTaskEventStatus(normalizeStatus(status));
 }
 function isCancelRequestedTaskEvent(event, task) {
     if (isCanceledStatus(task?.status))
@@ -442,10 +442,10 @@ function isCancelRequestedTaskEvent(event, task) {
     return isCancelRequestedStatus(event?.status) || isCancelRequestedStatus(task?.status);
 }
 function isCancelRequestedStatus(status) {
-    return normalizeStatus(status) === SOKOSUMI_TASK_EVENT_STATUS.CANCEL_REQUESTED;
+    return normalizeStatus(status) === "CANCEL_REQUESTED";
 }
 function isCanceledStatus(status) {
-    return isSokosumiCanceledTaskEventStatus(status);
+    return isSokosumiCanceledTaskEventStatus(normalizeStatus(status));
 }
 function hasTaskCancellationProgress(task, triggerEvent) {
     if (isCanceledStatus(task?.status))
@@ -619,7 +619,7 @@ function toSokosumiTaskStatus(status) {
         case SOKOSUMI_TASK_EVENT_STATUS.INPUT_REQUIRED:
         case SOKOSUMI_TASK_EVENT_STATUS.AUTHENTICATION_REQUIRED:
         case SOKOSUMI_TASK_EVENT_STATUS.OUT_OF_CREDITS:
-        case SOKOSUMI_TASK_EVENT_STATUS.CANCEL_REQUESTED:
+        case "CANCEL_REQUESTED":
             return "awaiting_approval";
         case SOKOSUMI_TASK_EVENT_STATUS.COMPLETED:
         case "DONE":
@@ -708,7 +708,7 @@ function defaultCreateFailedEvent({ error }) {
     return {
         status: SOKOSUMI_TASK_EVENT_STATUS.FAILED,
         origin: "SOKOSUMI",
-        comment: `The coworker failed while processing this task: ${error.message}`
+        comment: `The coworker failed while processing this task: ${getErrorMessage(error)}`
     };
 }
 function defaultCreateCanceledEvent() {

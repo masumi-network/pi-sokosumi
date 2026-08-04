@@ -1,13 +1,122 @@
-// @ts-nocheck
 import {
   SOKOSUMI_TASK_EVENT_STATUS,
   isSokosumiCanceledTaskEventStatus,
   isSokosumiCoworkerProgressStatus,
   isSokosumiTerminalTaskEventStatus,
-  normalizeSokosumiTaskStatus
+  normalizeSokosumiTaskStatus,
+  type ListSokosumiCoworkerEventsInput,
+  type SokosumiCoworkerEventPage,
+  type SokosumiTaskEvent,
+  type SokosumiTaskEventInput,
+  type SokosumiTaskSnapshot,
+  type SokosumiTaskStatus
 } from "../client/types.js";
+import type { Awaitable, SokosumiLogger } from "../sharedTypes.js";
+import { getErrorMessage } from "../sharedTypes.js";
 
-export function createSokosumiTaskPoller({
+export type SokosumiTaskPollerClient<
+  TEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
+  TTask extends SokosumiTaskSnapshot<TEvent> = SokosumiTaskSnapshot<TEvent>,
+  TCreatedTaskEvent extends SokosumiTaskEvent = SokosumiTaskEvent
+> = {
+  listCoworkerEvents(input?: ListSokosumiCoworkerEventsInput): Promise<SokosumiCoworkerEventPage<TEvent>>;
+  getTask(taskId: string): Promise<TTask | undefined>;
+  createTaskEvent(taskId: string, body: SokosumiTaskEventInput): Promise<TCreatedTaskEvent>;
+  updateTask?(input: { taskId: string; status: SokosumiTaskStatus }): Promise<TTask | SokosumiTaskSnapshot | undefined>;
+};
+
+export type SokosumiTaskPollerEventInput<
+  TEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
+  TTask extends SokosumiTaskSnapshot<TEvent> = SokosumiTaskSnapshot<TEvent>
+> = {
+  event: TEvent;
+  task: TTask;
+};
+
+export type SokosumiFailedTaskEventInput<
+  TEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
+  TTask extends SokosumiTaskSnapshot<TEvent> = SokosumiTaskSnapshot<TEvent>
+> = SokosumiTaskPollerEventInput<TEvent, TTask> & {
+  error: unknown;
+};
+
+export type SokosumiStaleInputRequiredEventInput<
+  TEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
+  TTask extends SokosumiTaskSnapshot<TEvent> = SokosumiTaskSnapshot<TEvent>
+> = SokosumiTaskPollerEventInput<TEvent, TTask> & {
+  inputRequiredEvent: TEvent;
+  now: Date;
+};
+
+export type SokosumiBeforeTaskEventCreatedInput<
+  TEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
+  TTask extends SokosumiTaskSnapshot<TEvent> = SokosumiTaskSnapshot<TEvent>,
+  TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput
+> = SokosumiTaskPollerEventInput<TEvent, TTask> & {
+  taskId: string;
+  taskEvent: TTaskEvent;
+};
+
+export type SokosumiAfterTaskEventCreatedInput<
+  TEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
+  TTask extends SokosumiTaskSnapshot<TEvent> = SokosumiTaskSnapshot<TEvent>,
+  TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput,
+  TCreatedTaskEvent extends SokosumiTaskEvent = SokosumiTaskEvent
+> = SokosumiBeforeTaskEventCreatedInput<TEvent, TTask, TTaskEvent> & {
+  createdTaskEvent: TCreatedTaskEvent;
+};
+
+export type SokosumiTaskEventFactory<
+  TEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
+  TTask extends SokosumiTaskSnapshot<TEvent> = SokosumiTaskSnapshot<TEvent>,
+  TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput
+> = (input: SokosumiTaskPollerEventInput<TEvent, TTask>) => Awaitable<TTaskEvent | undefined>;
+
+export type SokosumiTaskPollerOptions<
+  TEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
+  TTask extends SokosumiTaskSnapshot<TEvent> = SokosumiTaskSnapshot<TEvent>,
+  TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput,
+  TCreatedTaskEvent extends SokosumiTaskEvent = SokosumiTaskEvent
+> = {
+  client: SokosumiTaskPollerClient<TEvent, TTask, TCreatedTaskEvent>;
+  intervalMs?: number;
+  limit?: number;
+  maxPages?: number;
+  logger?: SokosumiLogger;
+  shouldProcessEvent?: (event: TEvent, task: TTask) => boolean;
+  hasTaskProgress?: (task: TTask, triggerEvent: TEvent) => boolean;
+  createReopenedEvent?: SokosumiTaskEventFactory<TEvent, TTask> | null;
+  createRunningEvent?: SokosumiTaskEventFactory<TEvent, TTask> | null;
+  createCanceledEvent?: SokosumiTaskEventFactory<TEvent, TTask> | null;
+  createCompletedEvent?: SokosumiTaskEventFactory<TEvent, TTask, TTaskEvent>;
+  createFailedEvent?: (
+    input: SokosumiFailedTaskEventInput<TEvent, TTask>
+  ) => Awaitable<SokosumiTaskEventInput | undefined>;
+  createStaleInputRequiredEvent?: (
+    input: SokosumiStaleInputRequiredEventInput<TEvent, TTask>
+  ) => Awaitable<TTaskEvent | undefined>;
+  inputRequiredTimeoutMs?: number;
+  now?: () => Date;
+  beforeTaskEventCreated?: (
+    input: SokosumiBeforeTaskEventCreatedInput<TEvent, TTask, TTaskEvent>
+  ) => Awaitable<TTaskEvent | undefined>;
+  afterTaskEventCreated?: (
+    input: SokosumiAfterTaskEventCreatedInput<TEvent, TTask, TTaskEvent, TCreatedTaskEvent>
+  ) => Awaitable<unknown>;
+};
+
+export type SokosumiTaskPoller = {
+  start(): void;
+  stop(): void;
+  tick(): Promise<void>;
+};
+
+export function createSokosumiTaskPoller<
+  TEvent extends SokosumiTaskEvent = SokosumiTaskEvent,
+  TTask extends SokosumiTaskSnapshot<TEvent> = SokosumiTaskSnapshot<TEvent>,
+  TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput,
+  TCreatedTaskEvent extends SokosumiTaskEvent = SokosumiTaskEvent
+>({
   client,
   intervalMs = 15000,
   limit = 20,
@@ -25,7 +134,7 @@ export function createSokosumiTaskPoller({
   now = () => new Date(),
   beforeTaskEventCreated,
   afterTaskEventCreated
-}) {
+}: SokosumiTaskPollerOptions<TEvent, TTask, TTaskEvent, TCreatedTaskEvent>): SokosumiTaskPoller {
   const processedEventIds = new Set();
   const canceledTaskIds = new Set();
   const completedStaleInputRequiredTaskIds = new Set();
@@ -117,14 +226,14 @@ export function createSokosumiTaskPoller({
     };
   }
 
-  async function loadTaskSnapshots(events) {
+  async function loadTaskSnapshots(events: TEvent[]) {
     const snapshots = new Map();
-    const taskIds = [
+    const taskIds: string[] = [
       ...new Set(
         events
           .filter((event) => event?.id && !processedEventIds.has(event.id))
           .map((event) => event?.taskId)
-          .filter(Boolean)
+          .filter((taskId): taskId is string => typeof taskId === "string" && Boolean(taskId))
       )
     ];
 
@@ -351,16 +460,16 @@ export function createSokosumiTaskPoller({
     });
   }
 
-  async function handleStaleInputRequiredTasks(events, taskSnapshots) {
+  async function handleStaleInputRequiredTasks(events: TEvent[], taskSnapshots) {
     if (!createStaleInputRequiredEvent || !Number.isFinite(Number(inputRequiredTimeoutMs)) || Number(inputRequiredTimeoutMs) <= 0) {
       return;
     }
 
-    const taskIds = [
+    const taskIds: string[] = [
       ...new Set(
         events
           .map((event) => event?.taskId)
-          .filter(Boolean)
+          .filter((taskId): taskId is string => typeof taskId === "string" && Boolean(taskId))
       )
     ];
 
@@ -480,7 +589,7 @@ function defaultHasTaskProgress(task, triggerEvent) {
 }
 
 function isCoworkerProgressStatus(status) {
-  return isSokosumiCoworkerProgressStatus(status);
+  return isSokosumiCoworkerProgressStatus(normalizeStatus(status));
 }
 
 function shouldCreateCommentOnlyEvent(task, triggerEvent) {
@@ -509,7 +618,7 @@ function isCommentOnlyCoworkerProgressEvent(event) {
 }
 
 function isTerminalTaskProgress(status) {
-  return isSokosumiTerminalTaskEventStatus(status);
+  return isSokosumiTerminalTaskEventStatus(normalizeStatus(status));
 }
 
 function isCancelRequestedTaskEvent(event, task) {
@@ -518,11 +627,11 @@ function isCancelRequestedTaskEvent(event, task) {
 }
 
 function isCancelRequestedStatus(status) {
-  return normalizeStatus(status) === SOKOSUMI_TASK_EVENT_STATUS.CANCEL_REQUESTED;
+  return normalizeStatus(status) === "CANCEL_REQUESTED";
 }
 
 function isCanceledStatus(status) {
-  return isSokosumiCanceledTaskEventStatus(status);
+  return isSokosumiCanceledTaskEventStatus(normalizeStatus(status));
 }
 
 function hasTaskCancellationProgress(task, triggerEvent) {
@@ -704,7 +813,7 @@ function toSokosumiTaskStatus(status) {
     case SOKOSUMI_TASK_EVENT_STATUS.INPUT_REQUIRED:
     case SOKOSUMI_TASK_EVENT_STATUS.AUTHENTICATION_REQUIRED:
     case SOKOSUMI_TASK_EVENT_STATUS.OUT_OF_CREDITS:
-    case SOKOSUMI_TASK_EVENT_STATUS.CANCEL_REQUESTED:
+    case "CANCEL_REQUESTED":
       return "awaiting_approval";
     case SOKOSUMI_TASK_EVENT_STATUS.COMPLETED:
     case "DONE":
@@ -783,7 +892,7 @@ function compareEventsOldestFirst(left, right) {
   return 0;
 }
 
-function defaultCreateRunningEvent() {
+function defaultCreateRunningEvent(): SokosumiTaskEventInput {
   return {
     status: SOKOSUMI_TASK_EVENT_STATUS.RUNNING,
     origin: "SOKOSUMI",
@@ -791,7 +900,7 @@ function defaultCreateRunningEvent() {
   };
 }
 
-function defaultCreateReopenedEvent() {
+function defaultCreateReopenedEvent(): SokosumiTaskEventInput {
   return {
     status: SOKOSUMI_TASK_EVENT_STATUS.READY,
     origin: "SOKOSUMI",
@@ -799,15 +908,15 @@ function defaultCreateReopenedEvent() {
   };
 }
 
-function defaultCreateFailedEvent({ error }) {
+function defaultCreateFailedEvent({ error }: { error: unknown }): SokosumiTaskEventInput {
   return {
     status: SOKOSUMI_TASK_EVENT_STATUS.FAILED,
     origin: "SOKOSUMI",
-    comment: `The coworker failed while processing this task: ${error.message}`
+    comment: `The coworker failed while processing this task: ${getErrorMessage(error)}`
   };
 }
 
-function defaultCreateCanceledEvent() {
+function defaultCreateCanceledEvent(): SokosumiTaskEventInput {
   return {
     status: SOKOSUMI_TASK_EVENT_STATUS.CANCELED,
     origin: "SOKOSUMI",

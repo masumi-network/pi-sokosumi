@@ -1,30 +1,51 @@
 import { Type } from "@earendil-works/pi-ai";
-import { SOKOSUMI_TASK_EVENT_STATUSES } from "../client/types.js";
-import type { PiExtensionAPI } from "../piTypes.js";
+import type { SokosumiHttpClient } from "../client/httpSokosumiClient.js";
+import {
+  SOKOSUMI_TASK_EVENT_STATUSES,
+  type CreateCoworkerUsageInput,
+  type ListSokosumiCoworkerEventsInput,
+  type SokosumiEventOrigin,
+  type SokosumiNonAuthenticationTaskEventStatus
+} from "../client/types.js";
+import type { PiToolRegistrationAPI } from "../piTypes.js";
 import { createJsonToolResult } from "./createJsonToolResult.js";
 import { createSokosumiCommentOnTaskTool } from "./sokosumiCommentOnTask.js";
 
-type SokosumiHttpClient = {
-  getCurrentCoworker(): Promise<unknown>;
-  listCoworkerEvents(input?: { limit?: number; cursor?: string }): Promise<unknown>;
-  getTask(taskId: string): Promise<unknown>;
-  createTaskEvent(taskId: string, body: Record<string, unknown>): Promise<unknown>;
-  createCoworkerUsage(input: {
-    userId: string;
-    organizationId?: string | null;
-    idempotencyKey: string;
-    credits: number;
-    referenceId?: string;
-  }): Promise<unknown>;
+export type SokosumiGetTaskToolInput = {
+  taskId: string;
 };
 
-export function registerSokosumiCoworkerTools(pi: PiExtensionAPI, client: SokosumiHttpClient) {
+type SokosumiCreateTaskEventToolInputBase = {
+  taskId: string;
+  comment?: string;
+  origin?: SokosumiEventOrigin;
+  credits?: number;
+};
+
+export type SokosumiCreateTaskEventToolInput =
+  | (SokosumiCreateTaskEventToolInputBase & {
+      status: "AUTHENTICATION_REQUIRED";
+      authenticationUrl: string;
+    })
+  | (SokosumiCreateTaskEventToolInputBase & {
+      status: SokosumiNonAuthenticationTaskEventStatus;
+      authenticationUrl?: never;
+    });
+
+export type SokosumiCreateCoworkerUsageToolInput = CreateCoworkerUsageInput;
+
+export type SokosumiCoworkerToolsClient = Pick<
+  SokosumiHttpClient,
+  "getCurrentCoworker" | "listCoworkerEvents" | "getTask" | "createTaskEvent" | "createCoworkerUsage"
+>;
+
+export function registerSokosumiCoworkerTools(pi: PiToolRegistrationAPI, client: SokosumiCoworkerToolsClient): void {
   pi.registerTool({
     name: "sokosumi_get_current_coworker",
     label: "Get Current Sokosumi Coworker",
     description: "Get the authenticated Sokosumi coworker profile for this agent.",
     parameters: Type.Object({}),
-    async execute() {
+    async execute(_toolCallId: string, _params: Record<string, never>) {
       return createJsonToolResult(await client.getCurrentCoworker());
     }
   });
@@ -37,7 +58,7 @@ export function registerSokosumiCoworkerTools(pi: PiExtensionAPI, client: Sokosu
       limit: Type.Optional(Type.Number({ minimum: 1, maximum: 100, description: "Maximum number of events to return" })),
       cursor: Type.Optional(Type.String({ description: "Pagination cursor" }))
     }),
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId: string, params: ListSokosumiCoworkerEventsInput) {
       return createJsonToolResult(await client.listCoworkerEvents(params));
     }
   });
@@ -49,7 +70,7 @@ export function registerSokosumiCoworkerTools(pi: PiExtensionAPI, client: Sokosu
     parameters: Type.Object({
       taskId: Type.String({ description: "Sokosumi task id" })
     }),
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId: string, params: SokosumiGetTaskToolInput) {
       return createJsonToolResult(await client.getTask(params.taskId));
     }
   });
@@ -64,6 +85,7 @@ export function registerSokosumiCoworkerTools(pi: PiExtensionAPI, client: Sokosu
       taskId: Type.String({ description: "Sokosumi task id" }),
       status: Type.Union(SOKOSUMI_TASK_EVENT_STATUSES.map((status) => Type.Literal(status))),
       comment: Type.Optional(Type.String({ description: "Visible task-board comment" })),
+      authenticationUrl: Type.Optional(Type.String({ description: "HTTPS authorization URL for AUTHENTICATION_REQUIRED events" })),
       origin: Type.Optional(
         Type.Union([
           Type.Literal("SLACK"),
@@ -83,7 +105,7 @@ export function registerSokosumiCoworkerTools(pi: PiExtensionAPI, client: Sokosu
       ),
       credits: Type.Optional(Type.Number({ exclusiveMinimum: 0, description: "Credits to charge, if applicable" }))
     }),
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId: string, params: SokosumiCreateTaskEventToolInput) {
       const { taskId, ...body } = params;
       return createJsonToolResult(
         await client.createTaskEvent(taskId, {
@@ -105,7 +127,7 @@ export function registerSokosumiCoworkerTools(pi: PiExtensionAPI, client: Sokosu
       credits: Type.Number({ exclusiveMinimum: 0, description: "Credits to charge" }),
       referenceId: Type.Optional(Type.String({ description: "Optional task, event, or job id for audit linkage" }))
     }),
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId: string, params: SokosumiCreateCoworkerUsageToolInput) {
       return createJsonToolResult(
         await client.createCoworkerUsage({
           userId: params.userId,

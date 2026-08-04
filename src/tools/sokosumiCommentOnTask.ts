@@ -1,5 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { PiToolDefinition } from "../piTypes.js";
+import { normalizeText } from "../sharedTypes.js";
 import { createJsonToolResult } from "./createJsonToolResult.js";
 
 export const SOKOSUMI_COMMENT_ON_TASK_TOOL_NAME = "sokosumi_comment_on_task";
@@ -11,8 +12,8 @@ export const SOKOSUMI_COMMENT_ON_TASK_TOOL_PARAMETERS = Type.Object({
   comment: Type.String({ description: "Visible progress comment" })
 });
 
-export type SokosumiTaskCommentClient = {
-  createTaskEvent(taskId: string, body: Record<string, unknown>): Promise<unknown>;
+export type SokosumiTaskCommentClient<TResult = unknown> = {
+  createTaskEvent(taskId: string, body: Record<string, unknown>): Promise<TResult>;
 };
 
 export type SokosumiCommentOnTaskInput = {
@@ -20,10 +21,10 @@ export type SokosumiCommentOnTaskInput = {
   comment: string;
 };
 
-export async function commentOnSokosumiTask(
-  client: SokosumiTaskCommentClient,
+export async function commentOnSokosumiTask<TResult>(
+  client: SokosumiTaskCommentClient<TResult>,
   input: SokosumiCommentOnTaskInput
-) {
+): Promise<TResult> {
   const taskId = normalizeRequiredText(input?.taskId, "task id");
   const comment = normalizeRequiredText(input?.comment, "comment");
 
@@ -33,9 +34,9 @@ export async function commentOnSokosumiTask(
   });
 }
 
-export function createSokosumiCommentOnTaskTool(
-  client: SokosumiTaskCommentClient
-): PiToolDefinition {
+export function createSokosumiCommentOnTaskTool<TResult>(
+  client: SokosumiTaskCommentClient<TResult>
+): PiToolDefinition<SokosumiCommentOnTaskInput, TResult> {
   return {
     name: SOKOSUMI_COMMENT_ON_TASK_TOOL_NAME,
     label: SOKOSUMI_COMMENT_ON_TASK_TOOL_LABEL,
@@ -48,7 +49,7 @@ export function createSokosumiCommentOnTaskTool(
 }
 
 function normalizeRequiredText(value: unknown, label: string) {
-  const normalized = String(value || "").trim();
+  const normalized = normalizeText(value);
   if (!normalized) {
     throw new Error(`Sokosumi ${label} is required.`);
   }

@@ -192,14 +192,18 @@ import {
   createMasumiCompletionHooks,
   createMasumiPaymentClient,
   createMasumiPaymentPoller,
-  createMemoryMasumiPaymentStore
+  createMemoryMasumiPaymentStore,
+  normalizeMasumiNetwork
 } from "@masumi-network/pi-sokosumi/masumi";
+
+const agentIdentifier = process.env.MASUMI_AGENT_IDENTIFIER;
+if (!agentIdentifier) throw new Error("MASUMI_AGENT_IDENTIFIER is required.");
 
 const masumiClient = createMasumiPaymentClient({
   apiUrl: process.env.MASUMI_PAYMENT_API_URL,
   apiToken: process.env.MASUMI_PAYMENT_API_TOKEN,
-  agentIdentifier: process.env.MASUMI_AGENT_IDENTIFIER,
-  network: process.env.MASUMI_NETWORK || "Preprod"
+  agentIdentifier,
+  network: normalizeMasumiNetwork(process.env.MASUMI_NETWORK || "Preprod")
 });
 
 const store = createMemoryMasumiPaymentStore();

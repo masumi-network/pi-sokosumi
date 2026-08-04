@@ -10,3 +10,20 @@ export type {
   SokosumiCommentOnTaskInput,
   SokosumiTaskCommentClient
 } from "./sokosumiCommentOnTask.js";
+export { createJsonToolResult } from "./createJsonToolResult.js";
+export { registerSokosumiCoworkerTools } from "./registerSokosumiCoworkerTools.js";
+export type {
+  SokosumiCoworkerToolsClient,
+  SokosumiCreateCoworkerUsageToolInput,
+  SokosumiCreateTaskEventToolInput,
+  SokosumiGetTaskToolInput
+} from "./registerSokosumiCoworkerTools.js";
+export { registerSokosumiTools } from "./registerSokosumiTools.js";
+export type { SokosumiMockToolsClient } from "./registerSokosumiTools.js";
+export type {
+  PiExtensionAPI,
+  PiToolContent,
+  PiToolDefinition,
+  PiToolRegistrationAPI,
+  PiToolResult
+} from "../piTypes.js";

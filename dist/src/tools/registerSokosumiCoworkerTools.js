@@ -8,7 +8,7 @@ export function registerSokosumiCoworkerTools(pi, client) {
         label: "Get Current Sokosumi Coworker",
         description: "Get the authenticated Sokosumi coworker profile for this agent.",
         parameters: Type.Object({}),
-        async execute() {
+        async execute(_toolCallId, _params) {
             return createJsonToolResult(await client.getCurrentCoworker());
         }
     });
@@ -44,6 +44,7 @@ export function registerSokosumiCoworkerTools(pi, client) {
             taskId: Type.String({ description: "Sokosumi task id" }),
             status: Type.Union(SOKOSUMI_TASK_EVENT_STATUSES.map((status) => Type.Literal(status))),
             comment: Type.Optional(Type.String({ description: "Visible task-board comment" })),
+            authenticationUrl: Type.Optional(Type.String({ description: "HTTPS authorization URL for AUTHENTICATION_REQUIRED events" })),
             origin: Type.Optional(Type.Union([
                 Type.Literal("SLACK"),
                 Type.Literal("TEAMS"),

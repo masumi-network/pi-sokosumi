@@ -7,12 +7,12 @@ export declare const SOKOSUMI_COMMENT_ON_TASK_TOOL_PARAMETERS: Type.TObject<{
     taskId: Type.TString;
     comment: Type.TString;
 }>;
-export type SokosumiTaskCommentClient = {
-    createTaskEvent(taskId: string, body: Record<string, unknown>): Promise<unknown>;
+export type SokosumiTaskCommentClient<TResult = unknown> = {
+    createTaskEvent(taskId: string, body: Record<string, unknown>): Promise<TResult>;
 };
 export type SokosumiCommentOnTaskInput = {
     taskId: string;
     comment: string;
 };
-export declare function commentOnSokosumiTask(client: SokosumiTaskCommentClient, input: SokosumiCommentOnTaskInput): Promise<unknown>;
-export declare function createSokosumiCommentOnTaskTool(client: SokosumiTaskCommentClient): PiToolDefinition;
+export declare function commentOnSokosumiTask<TResult>(client: SokosumiTaskCommentClient<TResult>, input: SokosumiCommentOnTaskInput): Promise<TResult>;
+export declare function createSokosumiCommentOnTaskTool<TResult>(client: SokosumiTaskCommentClient<TResult>): PiToolDefinition<SokosumiCommentOnTaskInput, TResult>;

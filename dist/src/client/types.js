@@ -1,7 +1,27 @@
+export const SOKOSUMI_EVENT_CHANNELS = [
+    "SLACK",
+    "TEAMS",
+    "EMAIL",
+    "LINEAR",
+    "GITHUB",
+    "WHATSAPP",
+    "TELEGRAM",
+    "SIGNAL",
+    "DISCORD",
+    "CHAT",
+    "MESSENGER",
+    "SOKOSUMI",
+    "UNKNOWN"
+];
+/** @deprecated Sokosumi calls this field `channel`; use SOKOSUMI_EVENT_CHANNELS. */
+export const SOKOSUMI_EVENT_ORIGINS = SOKOSUMI_EVENT_CHANNELS;
 export const SOKOSUMI_TASK_EVENT_STATUSES = [
     "DRAFT",
+    "QUEUED",
     "READY",
+    "GRANT_PENDING",
     "INPUT_REQUIRED",
+    "APPROVAL_REQUIRED",
     "AUTHENTICATION_REQUIRED",
     "OUT_OF_CREDITS",
     "CREDITS_TOPPED_UP",
@@ -9,20 +29,12 @@ export const SOKOSUMI_TASK_EVENT_STATUSES = [
     "AWAITING_EXTERNAL",
     "COMPLETED",
     "FAILED",
-    "CANCEL_REQUESTED",
     "CANCELED"
 ];
 export const SOKOSUMI_TASK_EVENT_STATUS = Object.freeze(Object.fromEntries(SOKOSUMI_TASK_EVENT_STATUSES.map((status) => [status, status])));
 export const SOKOSUMI_COWORKER_PROGRESS_STATUSES = [
-    "RUNNING",
-    "AWAITING_EXTERNAL",
-    "INPUT_REQUIRED",
-    "AUTHENTICATION_REQUIRED",
-    "OUT_OF_CREDITS",
-    "COMPLETED",
-    "FAILED",
+    ...SOKOSUMI_TASK_EVENT_STATUSES,
     "CANCEL_REQUESTED",
-    "CANCELED",
     "CANCELLED",
     "DONE"
 ];
@@ -54,19 +66,22 @@ export const SOKOSUMI_TASK_EVENT_STATUS_DECISION_PROMPT = [
     "Never use COMPLETED when your reply asks the user to do something before the task can finish."
 ].join("\n");
 export function isSokosumiTaskEventStatus(status) {
-    return SOKOSUMI_TASK_EVENT_STATUSES.includes(normalizeSokosumiTaskStatus(status));
+    return SOKOSUMI_TASK_EVENT_STATUSES.some((candidate) => candidate === status);
 }
 export function isSokosumiCoworkerProgressStatus(status) {
-    return SOKOSUMI_COWORKER_PROGRESS_STATUSES.includes(normalizeSokosumiTaskStatus(status));
+    return SOKOSUMI_COWORKER_PROGRESS_STATUSES.some((candidate) => candidate === status);
 }
 export function isSokosumiTerminalTaskEventStatus(status) {
-    return SOKOSUMI_TERMINAL_TASK_EVENT_STATUSES.includes(normalizeSokosumiTaskStatus(status));
+    return SOKOSUMI_TERMINAL_TASK_EVENT_STATUSES.some((candidate) => candidate === status);
 }
 export function isSokosumiCanceledTaskEventStatus(status) {
-    return SOKOSUMI_CANCELED_TASK_EVENT_STATUSES.includes(normalizeSokosumiTaskStatus(status));
+    return SOKOSUMI_CANCELED_TASK_EVENT_STATUSES.some((candidate) => candidate === status);
 }
 export function isSokosumiTaskEventDecisionStatus(status) {
-    return SOKOSUMI_TASK_EVENT_DECISION_STATUSES.includes(normalizeSokosumiTaskStatus(status));
+    return SOKOSUMI_TASK_EVENT_DECISION_STATUSES.some((candidate) => candidate === status);
+}
+export function isSokosumiEventOrigin(origin) {
+    return SOKOSUMI_EVENT_ORIGINS.some((candidate) => candidate === origin);
 }
 export function normalizeSokosumiTaskStatus(status) {
     return String(status || "")
@@ -75,4 +90,14 @@ export function normalizeSokosumiTaskStatus(status) {
         .replace(/[\s-]+/g, "_")
         .toUpperCase();
 }
+export const SOKOSUMI_TASK_LINK_RELATIONS = [
+    "related",
+    "blocks",
+    "blocked_by",
+    "parent",
+    "child",
+    "duplicate",
+    "schedule_run",
+    "schedule_series"
+];
 //# sourceMappingURL=types.js.map
