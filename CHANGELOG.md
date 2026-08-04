@@ -2,8 +2,16 @@
 
 ## Unreleased
 
+## 0.1.6
+
 - Added a reusable, status-neutral `sokosumi_comment_on_task` tool for
   user-visible agent progress comments.
+- Added explicit reusable TypeScript contracts for every public package entry
+  point, including generic worker, callback, hook, client, and store ports.
+- Added runtime validation for untrusted Sokosumi HTTP and Masumi payment
+  payloads before exposing them as domain objects.
+- Preserved literal status and network unions, bigint values, dates,
+  optionality, and nullability across published declarations.
 
 ## 0.1.5
 
