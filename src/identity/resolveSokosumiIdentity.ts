@@ -1,4 +1,5 @@
 import {
+  firstText,
   getPathValue as path,
   getProperty as property,
   getRecordProperty as recordProperty,
@@ -109,7 +110,7 @@ export function resolveSokosumiIdentity(
     root
   ].filter((candidate): candidate is Record<string, unknown> => Boolean(candidate));
 
-  const id = firstString(
+  const id = firstText(
     ...HEADER_USER_ID_KEYS.map((key) => headers[key]),
     ...ID_KEYS.map((key) => property(root, key)),
     ...ID_KEYS.map((key) => property(metadata, key)),
@@ -143,7 +144,7 @@ export function resolveSokosumiIdentity(
   if (!id) return null;
 
   const userObject = candidates.find((candidate) =>
-    firstString(
+    firstText(
       property(candidate, "id"),
       property(candidate, "userId"),
       property(candidate, "sokosumiUserId"),
@@ -153,14 +154,14 @@ export function resolveSokosumiIdentity(
 
   return {
     id,
-    name: firstString(
+    name: firstText(
       property(userObject, "name"),
       path(root, "user", "name"),
       path(metadata, "user", "name"),
       path(root, "sokosumi", "user", "name"),
       path(metadata, "sokosumi", "user", "name")
-    ),
-    image: firstString(
+    ) ?? "",
+    image: firstText(
       property(userObject, "image"),
       property(userObject, "avatarUrl"),
       path(root, "user", "image"),
@@ -168,8 +169,8 @@ export function resolveSokosumiIdentity(
       path(metadata, "user", "avatarUrl"),
       path(root, "sokosumi", "user", "image"),
       path(metadata, "sokosumi", "user", "image")
-    ),
-    organizationId: firstString(
+    ) ?? "",
+    organizationId: firstText(
       ...HEADER_ORGANIZATION_ID_KEYS.map((key) => headers[key]),
       ...candidates.flatMap((candidate) => [
         property(candidate, "organizationId"),
@@ -187,8 +188,8 @@ export function resolveSokosumiIdentity(
       path(metadata, "organization", "id"),
       path(root, "workspace", "organizationId"),
       path(metadata, "workspace", "organizationId")
-    ),
-    organizationSlug: firstString(
+    ) ?? "",
+    organizationSlug: firstText(
       ...HEADER_ORGANIZATION_SLUG_KEYS.map((key) => headers[key]),
       ...candidates.flatMap((candidate) => [
         property(candidate, "organizationSlug"),
@@ -206,8 +207,8 @@ export function resolveSokosumiIdentity(
       path(metadata, "organization", "slug"),
       path(root, "workspace", "organizationSlug"),
       path(metadata, "workspace", "organizationSlug")
-    ),
-    workspaceId: firstString(
+    ) ?? "",
+    workspaceId: firstText(
       ...HEADER_WORKSPACE_ID_KEYS.map((key) => headers[key]),
       ...candidates.flatMap((candidate) => [
         property(candidate, "workspaceId"),
@@ -221,8 +222,8 @@ export function resolveSokosumiIdentity(
       path(metadata, "user", "workspaceId"),
       path(root, "workspace", "id"),
       path(metadata, "workspace", "id")
-    ),
-    source: firstString(
+    ) ?? "",
+    source: firstText(
       property(root, "protocol"),
       property(metadata, "protocol"),
       property(root, "source"),
@@ -231,7 +232,7 @@ export function resolveSokosumiIdentity(
       property(metadata, "origin"),
       headers["x-delegation-user-id"] ? "sokosumi_delegation_headers" : "",
       headers["x-sokosumi-user-id"] ? "sokosumi_headers" : ""
-    )
+    ) ?? ""
   };
 }
 
@@ -290,14 +291,6 @@ function getMessageIdentityCandidates(message: unknown): Record<string, unknown>
 }
 
 function normalizeHeaderValue(value: unknown): string {
-  if (Array.isArray(value)) return firstString(...value);
-  return firstString(value);
-}
-
-function firstString(...values: unknown[]): string {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  }
-  return "";
+  if (Array.isArray(value)) return firstText(...value) ?? "";
+  return firstText(value) ?? "";
 }

@@ -1,5 +1,6 @@
 import { type CreateCoworkerUsageInput, type ListSokosumiCoworkerEventsInput, type SokosumiCoworker, type SokosumiCoworkerEventPage, type SokosumiCoworkerUsage, type SokosumiDelegationOptions, type SokosumiTaskEvent, type SokosumiTaskEventInput, type SokosumiTaskSnapshot, type SokosumiUser, type UpdateTaskInput } from "./types.js";
-export type SokosumiFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Pick<Response, "ok" | "status" | "text">>;
+import { type JsonFetch } from "../jsonHttpTransport.js";
+export type SokosumiFetch = JsonFetch;
 export type HttpSokosumiClientOptions = {
     apiUrl?: string;
     apiKey?: string;

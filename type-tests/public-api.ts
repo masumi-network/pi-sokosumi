@@ -133,6 +133,7 @@ import {
   usdToMasumiCostCents,
   type MasumiCompletionHooksOptions,
   type MasumiCompletionPaymentClient,
+  type MasumiCompletionTaskEvent,
   type MasumiNetwork,
   type MasumiPayment,
   type MasumiPaymentClientOptions,
@@ -281,6 +282,11 @@ const eventRecord: SokosumiTaskEvent = {
   status: "READY",
   comment: null
 };
+const cancellationEventRecord: SokosumiTaskEvent = {
+  ...eventRecord,
+  id: "event-cancel-requested",
+  status: "CANCEL_REQUESTED"
+};
 const taskRecord: SokosumiTaskSnapshot = {
   id: "task-1",
   createdAt: "2026-08-03T10:00:00.000Z",
@@ -316,6 +322,7 @@ const taskRecord: SokosumiTaskSnapshot = {
 };
 void eventInput;
 void eventChannel;
+void cancellationEventRecord;
 void taskRecord;
 void SOKOSUMI_CANCELED_TASK_EVENT_STATUSES;
 void SOKOSUMI_COWORKER_PROGRESS_STATUSES;
@@ -375,6 +382,16 @@ const conflictingEventBilling: SokosumiTaskEventInput = {
   masumiPayment: eventPaymentPayload
 };
 void conflictingEventBilling;
+const directCreditCompletion = {
+  status: "COMPLETED",
+  origin: "SOKOSUMI",
+  credits: 3
+} satisfies SokosumiTaskEventInput;
+declare const masumiBackedCompletion: MasumiCompletionTaskEvent<typeof directCreditCompletion>;
+const attachedPayment: SokosumiMasumiPaymentPayload = masumiBackedCompletion.masumiPayment;
+void attachedPayment;
+// @ts-expect-error attaching a Masumi payment removes direct credits from the event payload
+void masumiBackedCompletion.credits;
 const incompleteEventPayment: SokosumiTaskEventInput = {
   status: "COMPLETED",
   // @ts-expect-error Masumi event payloads must include the complete exported wire shape
@@ -782,10 +799,24 @@ const paymentPayload = createSokosumiMasumiPaymentPayload({
   id: "payment-1",
   blockchainIdentifier: "blockchain-1",
   agentIdentifier: "agent-1",
+  payByTime: "1775737949000",
+  submitResultTime: "1775681853000",
+  unlockTime: "1775763149000",
+  externalDisputeUnlockTime: "1775784749000",
+  inputHash: "a".repeat(64),
+  identifierFromPurchaser: "0011223344556677",
   RequestedFunds: [{ amount: "30000", unit: "unit" }],
-  PaymentSource: { network: "Preprod" }
+  SmartContractWallet: { walletVkey: "seller-vkey" },
+  PaymentSource: {
+    network: "Preprod",
+    smartContractAddress: "addr_test_contract",
+    policyId: "policy"
+  }
 });
-void paymentPayload;
+const paymentSellerVkey: string = paymentPayload.sellerVkey;
+const firstPaymentAmount: SokosumiMasumiPaymentPayload["Amounts"][number] = paymentPayload.Amounts[0];
+void paymentSellerVkey;
+void firstPaymentAmount;
 const memoryStore = createMemoryMasumiPaymentStore();
 const storePort: MasumiPaymentStore = memoryStore;
 const pendingInput: RecordPendingMasumiPaymentInput = {

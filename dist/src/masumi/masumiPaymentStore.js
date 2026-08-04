@@ -1,4 +1,4 @@
-import { isRecord } from "../sharedTypes.js";
+import { isRecord, normalizeText } from "../sharedTypes.js";
 export const MASUMI_PAYMENT_SUBMIT_STATUSES = ["pending", "submitted", "dropped"];
 export function createMemoryMasumiPaymentStore() {
     const records = new Map();
@@ -101,7 +101,7 @@ function sanitizeRecord(record) {
     };
 }
 function normalizeSubmitStatus(value) {
-    const text = String(value || "").trim().toLowerCase();
+    const text = normalizeText(value).toLowerCase();
     if (text === "submitted" || text === "dropped")
         return text;
     return "pending";

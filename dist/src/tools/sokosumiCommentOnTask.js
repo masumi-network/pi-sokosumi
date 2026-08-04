@@ -1,4 +1,5 @@
 import { Type } from "@earendil-works/pi-ai";
+import { normalizeText } from "../sharedTypes.js";
 import { createJsonToolResult } from "./createJsonToolResult.js";
 export const SOKOSUMI_COMMENT_ON_TASK_TOOL_NAME = "sokosumi_comment_on_task";
 export const SOKOSUMI_COMMENT_ON_TASK_TOOL_LABEL = "Comment On Sokosumi Task";
@@ -27,7 +28,7 @@ export function createSokosumiCommentOnTaskTool(client) {
     };
 }
 function normalizeRequiredText(value, label) {
-    const normalized = String(value || "").trim();
+    const normalized = normalizeText(value);
     if (!normalized) {
         throw new Error(`Sokosumi ${label} is required.`);
     }

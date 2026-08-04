@@ -1,4 +1,5 @@
 import {
+  SOKOSUMI_COWORKER_PROGRESS_STATUSES,
   SOKOSUMI_EVENT_CHANNELS,
   SOKOSUMI_TASK_LINK_RELATIONS,
   SOKOSUMI_TASK_EVENT_STATUSES,
@@ -15,12 +16,10 @@ import {
   type SokosumiUser,
   type UpdateTaskInput
 } from "./types.js";
-import { isRecord } from "../sharedTypes.js";
+import { requestJson, stripTrailingSlash, type JsonFetch } from "../jsonHttpTransport.js";
+import { createJsonValidators, isRecord, normalizeText } from "../sharedTypes.js";
 
-export type SokosumiFetch = (
-  input: string | URL | Request,
-  init?: RequestInit
-) => Promise<Pick<Response, "ok" | "status" | "text">>;
+export type SokosumiFetch = JsonFetch;
 
 export type HttpSokosumiClientOptions = {
   apiUrl?: string;
@@ -65,6 +64,15 @@ export class SokosumiRequestError extends Error {
     this.payload = options.payload;
   }
 }
+
+const {
+  expectArray,
+  expectBoolean,
+  expectNullableString,
+  expectNumber,
+  expectRecord,
+  expectString
+} = createJsonValidators(throwInvalidResponse);
 
 export type SokosumiHttpClient = {
   getCurrentCoworker(): Promise<SokosumiCoworker>;
@@ -116,15 +124,16 @@ export function createHttpSokosumiClient({
     },
 
     async getTask(taskId) {
-      const payload = await request(`/v1/tasks/${encodeURIComponent(taskId)}`);
+      const normalizedTaskId = normalizeRequiredInputText(taskId, "task id");
+      const payload = await request(`/v1/tasks/${encodeURIComponent(normalizedTaskId)}`);
       const data = expectEnvelope(payload, "task").data;
       return data == null ? undefined : narrowTask(data, "Sokosumi task");
     },
 
     async updateTask(input) {
       const { taskId, ...body } = input;
-      if (!taskId) throw new Error("Sokosumi task id is required.");
-      const payload = await request(`/v1/tasks/${encodeURIComponent(taskId)}`, {
+      const normalizedTaskId = normalizeRequiredInputText(taskId, "task id");
+      const payload = await request(`/v1/tasks/${encodeURIComponent(normalizedTaskId)}`, {
         method: "PATCH",
         body
       });
@@ -132,9 +141,10 @@ export function createHttpSokosumiClient({
     },
 
     async getUser(userId, options = {}) {
-      const payload = await request(`/v1/users/${encodeURIComponent(userId)}`, {
+      const normalizedUserId = normalizeRequiredInputText(userId, "user id");
+      const payload = await request(`/v1/users/${encodeURIComponent(normalizedUserId)}`, {
         headers: createDelegationHeaders({
-          userId,
+          userId: normalizedUserId,
           organizationId: options.organizationId,
           organizationSlug: options.organizationSlug
         })
@@ -144,9 +154,11 @@ export function createHttpSokosumiClient({
     },
 
     async createTaskEvent(taskId, body) {
-      const payload = await request(`/v1/tasks/${encodeURIComponent(taskId)}/events`, {
+      const normalizedTaskId = normalizeRequiredInputText(taskId, "task id");
+      const normalizedBody = normalizeTaskEventInput(body);
+      const payload = await request(`/v1/tasks/${encodeURIComponent(normalizedTaskId)}/events`, {
         method: "POST",
-        body
+        body: normalizedBody
       });
       return narrowTaskEvent(expectEnvelope(payload, "created task event").data, "created Sokosumi task event");
     },
@@ -165,48 +177,32 @@ export function createHttpSokosumiClient({
       throw new Error("Sokosumi API key is required.");
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    let response: Pick<Response, "ok" | "status" | "text">;
-
-    try {
-      response = await fetchImpl(`${baseUrl}${path}`, {
-        method: options.method || "GET",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          ...normalizeRequestHeaders(options.headers)
-        },
-        body: options.body ? JSON.stringify(options.body) : undefined,
-        signal: controller.signal
-      });
-    } catch (error) {
-      if (isRecord(error) && error.name === "AbortError") {
-        throw new SokosumiRequestError(`Sokosumi request timed out after ${timeoutMs}ms`, {
-          code: "timeout",
-          cause: error
+    return requestJson({
+      fetchImpl,
+      url: `${baseUrl}${path}`,
+      timeoutMs,
+      method: options.method,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        ...normalizeRequestHeaders(options.headers)
+      },
+      body: options.body,
+      createTimeoutError: (error) => new SokosumiRequestError(
+        `Sokosumi request timed out after ${timeoutMs}ms`,
+        { code: "timeout", cause: error }
+      ),
+      createHttpError: ({ statusCode, payload }) => {
+        const message = isRecord(payload) && typeof payload.message === "string"
+          ? payload.message
+          : `Sokosumi request failed with ${statusCode}`;
+        return new SokosumiRequestError(`${message} (${statusCode})`, {
+          code: "http_error",
+          statusCode,
+          payload
         });
       }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    const text = await response.text();
-    const payload = text ? parseJson(text) : {};
-
-    if (!response.ok) {
-      const message = isRecord(payload) && typeof payload.message === "string"
-        ? payload.message
-        : `Sokosumi request failed with ${response.status}`;
-      throw new SokosumiRequestError(`${message} (${response.status})`, {
-        code: "http_error",
-        statusCode: response.status,
-        payload
-      });
-    }
-
-    return payload;
+    });
   }
 }
 
@@ -225,7 +221,7 @@ function normalizeCoworkerUsageInput(
   const organizationId = organizationIdInput === null || organizationIdInput === undefined
     ? null
     : normalizeRequiredText(organizationIdInput, "organizationId");
-  const referenceId = String(input.referenceId || aliases.reference_id || "").trim();
+  const referenceId = normalizeText(input.referenceId || aliases.reference_id);
 
   return {
     userId,
@@ -237,9 +233,55 @@ function normalizeCoworkerUsageInput(
 }
 
 function normalizeRequiredText(value: unknown, label: string): string {
-  const text = String(value || "").trim();
+  const text = normalizeText(value);
   if (!text) throw new Error(`Sokosumi coworker usage requires ${label}.`);
   return text;
+}
+
+function normalizeRequiredInputText(value: unknown, label: string): string {
+  const text = normalizeText(value);
+  if (!text) throw new Error(`Sokosumi ${label} is required.`);
+  return text;
+}
+
+function normalizeTaskEventInput(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new Error("Sokosumi task event body must be a JSON object.");
+  }
+
+  const { status, comment, credits, masumiPayment, authenticationUrl, channel, origin } = value;
+  if (status === undefined && comment === undefined && credits === undefined && masumiPayment === undefined) {
+    throw new Error("Sokosumi task event body must include a status, comment, credits, or masumiPayment.");
+  }
+  if (status !== undefined && !SOKOSUMI_TASK_EVENT_STATUSES.some((candidate) => candidate === status)) {
+    throw new Error(`Unsupported Sokosumi task event status: ${String(status)}.`);
+  }
+  if (status === "AUTHENTICATION_REQUIRED") {
+    normalizeRequiredInputText(authenticationUrl, "authentication URL");
+  } else if (authenticationUrl !== undefined) {
+    throw new Error("Sokosumi authentication URL is only supported for AUTHENTICATION_REQUIRED events.");
+  }
+  if (comment !== undefined && typeof comment !== "string") {
+    throw new Error("Sokosumi task event comment must be a string when provided.");
+  }
+  if (credits !== undefined && (typeof credits !== "number" || !Number.isFinite(credits) || credits <= 0)) {
+    throw new Error("Sokosumi task event credits must be a positive number when provided.");
+  }
+  if (masumiPayment !== undefined && !isRecord(masumiPayment)) {
+    throw new Error("Sokosumi task event masumiPayment must be a JSON object when provided.");
+  }
+  if (credits !== undefined && masumiPayment !== undefined) {
+    throw new Error("Sokosumi task events cannot include both credits and masumiPayment.");
+  }
+  if (channel !== undefined && origin !== undefined) {
+    throw new Error("Sokosumi task events cannot include both channel and origin.");
+  }
+  for (const [label, candidate] of [["channel", channel], ["origin", origin]] as const) {
+    if (candidate !== undefined && !SOKOSUMI_EVENT_CHANNELS.some((item) => item === candidate)) {
+      throw new Error(`Unsupported Sokosumi task event ${label}: ${String(candidate)}.`);
+    }
+  }
+  return value;
 }
 
 function createDelegationHeaders({
@@ -258,21 +300,13 @@ function normalizeRequestHeaders(headers: Record<string, unknown> | undefined): 
   if (!headers) return {};
   const normalized: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers)) {
-    const header = String(key || "").trim();
+    const header = normalizeText(key);
     if (!header || /^authorization$/i.test(header)) continue;
-    const firstValue = Array.isArray(value) ? value.find((item) => String(item || "").trim()) : value;
-    const normalizedValue = String(firstValue || "").trim();
+    const firstValue = Array.isArray(value) ? value.find((item) => normalizeText(item)) : value;
+    const normalizedValue = normalizeText(firstValue);
     if (normalizedValue) normalized[header] = normalizedValue;
   }
   return normalized;
-}
-
-function parseJson(value: string): unknown {
-  try {
-    return JSON.parse(value) as unknown;
-  } catch {
-    return { raw: value };
-  }
 }
 
 function expectEnvelope(value: unknown, label: string): Record<string, unknown> {
@@ -281,26 +315,6 @@ function expectEnvelope(value: unknown, label: string): Record<string, unknown> 
 
 function expectObjectData(value: unknown, label: string): Record<string, unknown> {
   return expectRecord(expectEnvelope(value, label).data, `Sokosumi ${label}`);
-}
-
-function expectRecord(value: unknown, label: string): Record<string, unknown> {
-  if (!isRecord(value)) {
-    throw new SokosumiRequestError(`${label} must be a JSON object.`, {
-      code: "invalid_response",
-      payload: value
-    });
-  }
-  return value;
-}
-
-function expectArray(value: unknown, label: string): unknown[] {
-  if (!Array.isArray(value)) {
-    throw new SokosumiRequestError(`${label} must be a JSON array.`, {
-      code: "invalid_response",
-      payload: value
-    });
-  }
-  return value;
 }
 
 function narrowTask(value: unknown, label: string): SokosumiTaskSnapshot {
@@ -333,7 +347,7 @@ function narrowTask(value: unknown, label: string): SokosumiTaskSnapshot {
   task.orchestrator === null
     ? null
     : narrowOrchestratorSummary(task.orchestrator, `${label}.orchestrator`);
-  expectTaskEventStatus(task.status, `${label}.status`);
+  expectObservedTaskStatus(task.status, `${label}.status`);
   if (task.grantResumeStatus !== null && task.grantResumeStatus !== "DRAFT" && task.grantResumeStatus !== "READY") {
     throwInvalidResponse(`${label}.grantResumeStatus must be DRAFT, READY, or null.`, task.grantResumeStatus);
   }
@@ -413,7 +427,7 @@ function narrowTaskEvent(value: unknown, label: string): SokosumiTaskEvent {
   if (
     event.status !== undefined &&
     event.status !== null &&
-    !SOKOSUMI_TASK_EVENT_STATUSES.some((status) => status === event.status)
+    !SOKOSUMI_COWORKER_PROGRESS_STATUSES.some((status) => status === event.status)
   ) {
     throwInvalidResponse(`${label}.status is not a supported Sokosumi event status.`, event.status);
   }
@@ -448,35 +462,6 @@ function assertOptionalRecord(value: unknown, label: string): void {
   }
 }
 
-function expectString(value: unknown, label: string): string {
-  if (typeof value !== "string") {
-    throwInvalidResponse(`${label} must be a string.`, value);
-  }
-  return value;
-}
-
-function expectNullableString(value: unknown, label: string): string | null {
-  if (value !== null && typeof value !== "string") {
-    throwInvalidResponse(`${label} must be a string or null.`, value);
-  }
-  // TypeScript does not retain the compound unknown narrowing with strict mode disabled.
-  return value as string | null;
-}
-
-function expectNumber(value: unknown, label: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throwInvalidResponse(`${label} must be a finite number.`, value);
-  }
-  return value;
-}
-
-function expectBoolean(value: unknown, label: string): boolean {
-  if (typeof value !== "boolean") {
-    throwInvalidResponse(`${label} must be a boolean.`, value);
-  }
-  return value;
-}
-
 function expectNullableRecord(value: unknown, label: string): Record<string, unknown> | null {
   return value === null ? null : expectRecord(value, label);
 }
@@ -489,8 +474,12 @@ function expectStringArray(value: unknown, label: string): string[] {
   return expectArray(value, label).map((item, index) => expectString(item, `${label}[${index}]`));
 }
 
-function expectTaskEventStatus(value: unknown, label: string): void {
-  if (!SOKOSUMI_TASK_EVENT_STATUSES.some((status) => status === value)) {
+function expectObservedTaskStatus(value: unknown, label: string): void {
+  const taskStatuses = ["draft", "in_progress", "awaiting_approval", "done", "failed"] as const;
+  if (
+    !taskStatuses.some((status) => status === value) &&
+    !SOKOSUMI_COWORKER_PROGRESS_STATUSES.some((status) => status === value)
+  ) {
     throwInvalidResponse(`${label} is not a supported Sokosumi task status.`, value);
   }
 }
@@ -550,7 +539,7 @@ function narrowTaskLink(value: unknown, label: string): Record<string, unknown> 
   const peerTask = expectRecord(link.peerTask, `${label}.peerTask`);
   expectString(peerTask.id, `${label}.peerTask.id`);
   expectString(peerTask.name, `${label}.peerTask.name`);
-  expectTaskEventStatus(peerTask.status, `${label}.peerTask.status`);
+  expectObservedTaskStatus(peerTask.status, `${label}.peerTask.status`);
   expectNullableString(peerTask.archivedAt, `${label}.peerTask.archivedAt`);
   expectNullableString(link.note, `${label}.note`);
   return link;
@@ -612,10 +601,6 @@ function narrowCoworkerUsage(value: unknown): SokosumiCoworkerUsage {
 
 function throwInvalidResponse(message: string, payload: unknown): never {
   throw new SokosumiRequestError(message, { code: "invalid_response", payload });
-}
-
-function stripTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
 export type {

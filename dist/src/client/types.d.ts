@@ -1,4 +1,4 @@
-import type { SokosumiMasumiPaymentPayload } from "../masumi/masumiPaymentClient.js";
+import type { SokosumiMasumiPaymentPayload } from "../masumi/sokosumiMasumiPaymentPayload.js";
 export type SokosumiTaskStatus = "draft" | "in_progress" | "awaiting_approval" | "done" | "failed";
 export declare const SOKOSUMI_EVENT_CHANNELS: readonly ["SLACK", "TEAMS", "EMAIL", "LINEAR", "GITHUB", "WHATSAPP", "TELEGRAM", "SIGNAL", "DISCORD", "CHAT", "MESSENGER", "SOKOSUMI", "UNKNOWN"];
 export type SokosumiEventChannel = typeof SOKOSUMI_EVENT_CHANNELS[number];
@@ -68,7 +68,7 @@ export type SokosumiTaskEvent<TMetadata extends Record<string, unknown> = Record
     channel: SokosumiEventChannel;
     /** @deprecated Use channel. */
     origin: SokosumiEventOrigin;
-    status?: SokosumiTaskEventStatus | null;
+    status?: SokosumiCoworkerProgressStatus | null;
     transactionId?: string | null;
     credits?: number | null;
     comment?: string | null;
@@ -148,7 +148,7 @@ export type SokosumiTaskLink = Record<string, unknown> & {
     peerTask: {
         id: string;
         name: string;
-        status: SokosumiTaskEventStatus;
+        status: SokosumiObservedTaskStatus;
         archivedAt: string | null;
     };
     note: string | null;
@@ -176,7 +176,7 @@ export type SokosumiTaskSnapshot<TEvent extends SokosumiTaskEvent = SokosumiTask
     description: string | null;
     body?: string;
     content?: string;
-    status: SokosumiTaskEventStatus;
+    status: SokosumiObservedTaskStatus;
     grantResumeStatus: "DRAFT" | "READY" | null;
     pendingVendorGrantId: string | null;
     metadata: TMetadata | null;

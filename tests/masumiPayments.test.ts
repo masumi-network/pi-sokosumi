@@ -7,6 +7,7 @@ import {
   createMasumiPaymentClient,
   createMasumiPaymentPoller,
   createMemoryMasumiPaymentStore,
+  createSokosumiMasumiPaymentPayload,
   creditsToMasumiRawUnits,
   sha256Hex
 } from "../src/masumi/index.js";
@@ -150,6 +151,26 @@ test("Masumi payment client rejects incomplete external payment objects", async 
   );
 });
 
+test("Masumi payment client preserves structured HTTP failures through the shared transport", async () => {
+  const client = createMasumiPaymentClient({
+    apiUrl: "https://masumi.example.test/api/v1",
+    apiToken: "payment-token",
+    agentIdentifier: "agent1",
+    async fetchImpl() {
+      return jsonResponse({ error: "temporarily unavailable" }, 503);
+    }
+  });
+
+  await assert.rejects(
+    () => client.listPayments(),
+    (error) =>
+      error?.name === "MasumiPaymentError" &&
+      error?.code === "http_error" &&
+      error?.statusCode === 503 &&
+      error?.payload?.error === "temporarily unavailable"
+  );
+});
+
 test("Masumi submit-result narrows the payment response", async () => {
   const client = createMasumiPaymentClient({
     apiUrl: "https://masumi.example.test/api/v1",
@@ -194,6 +215,30 @@ test("Masumi submit-result rejects incomplete external payment objects", async (
     }),
     (error) => error?.code === "invalid_response" && /\.id must be a string/.test(error.message)
   );
+});
+
+test("Sokosumi payment payload adapter rejects incomplete Masumi data", () => {
+  assert.throws(
+    () => createSokosumiMasumiPaymentPayload({}),
+    (error) => error?.code === "invalid_response" && /payload\.blockchainIdentifier must be a non-empty string/.test(error.message)
+  );
+});
+
+test("Sokosumi payment payload adapter preserves the optional Masumi database id", () => {
+  const payment = createSokosumiMasumiPaymentPayload({
+    blockchainIdentifier: "blockchain-without-id",
+    agentIdentifier: "agent-without-id",
+    sellerVkey: "seller-vkey",
+    payByTime: "2026-06-05T02:00:00.000Z",
+    submitResultTime: "2026-06-05T03:00:00.000Z",
+    unlockTime: "2026-06-05T09:00:00.000Z",
+    externalDisputeUnlockTime: "2026-06-05T15:00:00.000Z",
+    inputHash: "abc123",
+    identifierFromPurchaser: "0011223344556677",
+    Amounts: [{ amount: "30000", unit: "unit" }]
+  });
+
+  assert.equal("id" in payment, false);
 });
 
 test("Masumi completion hooks attach payment data and persist exact payload hash after Sokosumi accepts it", async () => {
@@ -250,6 +295,7 @@ test("Masumi completion hooks attach payment data and persist exact payload hash
       status: "COMPLETED",
       origin: "SOKOSUMI",
       comment: "Done.",
+      credits: 3,
       metadata: {
         composedBy: "pi-agent"
       }
@@ -257,6 +303,7 @@ test("Masumi completion hooks attach payment data and persist exact payload hash
   });
   assert.equal(taskEvent.masumiPayment.id, "payment-hook");
   assert.equal(taskEvent.masumiPayment.sellerVkey, "seller-vkey");
+  assert.equal("credits" in taskEvent, false);
 
   await hooks.afterTaskEventCreated({
     taskId: "task-hook",
@@ -294,11 +341,20 @@ test("disabled and unconfigured Masumi completion hooks preserve existing task e
     await createMasumiCompletionHooks().beforeTaskEventCreated(input),
     taskEvent
   );
-  assert.equal(
-    await createMasumiCompletionHooks({
+});
+
+test("configured Masumi completion hooks reject an invalid pre-attached payment", async () => {
+  await assert.rejects(
+    () => createMasumiCompletionHooks({
       masumiClient: { createPayment: async () => { throw new Error("should not create"); } }
-    }).beforeTaskEventCreated(input),
-    taskEvent
+    }).beforeTaskEventCreated({
+      taskId: "task-invalid-payment",
+      taskEvent: {
+        status: "COMPLETED",
+        masumiPayment: { legacy: true }
+      }
+    }),
+    (error) => error?.code === "invalid_response" && /payload\.blockchainIdentifier must be a non-empty string/.test(error.message)
   );
 });
 

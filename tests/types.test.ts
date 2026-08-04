@@ -5,6 +5,7 @@ import {
   isSokosumiTaskEventStatus,
   normalizeSokosumiTaskStatus
 } from "../src/client/types.js";
+import { resolveSokosumiIdentity } from "../src/identity/resolveSokosumiIdentity.js";
 
 test("Sokosumi type guards only narrow canonical literal values", () => {
   assert.equal(isSokosumiTaskEventStatus("READY"), true);
@@ -17,4 +18,16 @@ test("Sokosumi type guards only narrow canonical literal values", () => {
   assert.equal(isSokosumiEventOrigin("USER"), false);
   assert.equal(isSokosumiEventOrigin("sokosumi"), false);
   assert.equal(isSokosumiTaskEventStatus(normalizeSokosumiTaskStatus("ready")), true);
+});
+
+test("Sokosumi identity extraction preserves required string fallbacks", () => {
+  assert.deepEqual(resolveSokosumiIdentity({ userId: "user-1" }), {
+    id: "user-1",
+    name: "",
+    image: "",
+    organizationId: "",
+    organizationSlug: "",
+    workspaceId: "",
+    source: ""
+  });
 });

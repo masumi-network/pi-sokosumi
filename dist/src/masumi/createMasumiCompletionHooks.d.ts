@@ -1,7 +1,8 @@
 import { type SokosumiTaskEvent, type SokosumiTaskEventInput, type SokosumiTaskSnapshot } from "../client/types.js";
 import type { SokosumiAfterTaskEventCreatedInput, SokosumiBeforeTaskEventCreatedInput } from "../poller/createSokosumiTaskPoller.js";
 import type { Awaitable, SokosumiLogger } from "../sharedTypes.js";
-import { type MasumiAmountInput, type MasumiCreatePaymentInput, type SokosumiMasumiPaymentPayloadInput, type SokosumiMasumiPaymentPayload } from "./masumiPaymentClient.js";
+import { type MasumiAmountInput, type MasumiCreatePaymentInput } from "./masumiPaymentClient.js";
+import { type SokosumiMasumiPaymentPayloadInput, type SokosumiMasumiPaymentPayload } from "./sokosumiMasumiPaymentPayload.js";
 import type { MasumiPaymentStore, MasumiPendingPaymentRecord } from "./masumiPaymentStore.js";
 export type MasumiCompletionCostDetails = {
     costCents?: MasumiAmountInput;
@@ -11,9 +12,9 @@ export type MasumiCompletionCostDetails = {
     rawAmount?: MasumiAmountInput;
 };
 export type MasumiCompletionCostResult = MasumiAmountInput | MasumiCompletionCostDetails | false | null | undefined | "";
-export type MasumiCompletionTaskEvent<TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput> = TTaskEvent & {
+export type MasumiCompletionTaskEvent<TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput> = TTaskEvent extends unknown ? Omit<TTaskEvent, "credits" | "masumiPayment"> & {
     masumiPayment: SokosumiMasumiPaymentPayload;
-};
+} : never;
 export type MasumiCompletionBeforeHookResult<TTaskEvent extends SokosumiTaskEventInput = SokosumiTaskEventInput> = TTaskEvent | MasumiCompletionTaskEvent<TTaskEvent>;
 export type MasumiCompletionPaymentClient<TResult extends SokosumiMasumiPaymentPayloadInput = SokosumiMasumiPaymentPayloadInput> = {
     createPayment(input: MasumiCreatePaymentInput): Awaitable<TResult>;

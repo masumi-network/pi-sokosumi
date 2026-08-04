@@ -1,5 +1,6 @@
-import type { MasumiNetwork, SokosumiMasumiPaymentPayload } from "./masumiPaymentClient.js";
-import { isRecord } from "../sharedTypes.js";
+import type { MasumiNetwork } from "./masumiPaymentClient.js";
+import type { SokosumiMasumiPaymentPayload } from "./sokosumiMasumiPaymentPayload.js";
+import { isRecord, normalizeText } from "../sharedTypes.js";
 
 export const MASUMI_PAYMENT_SUBMIT_STATUSES = ["pending", "submitted", "dropped"] as const;
 
@@ -219,7 +220,7 @@ function sanitizeRecord(record: MasumiPendingPaymentRecord): MasumiPendingPaymen
 }
 
 function normalizeSubmitStatus(value: unknown): MasumiPaymentSubmitStatus {
-  const text = String(value || "").trim().toLowerCase();
+  const text = normalizeText(value).toLowerCase();
   if (text === "submitted" || text === "dropped") return text;
   return "pending";
 }

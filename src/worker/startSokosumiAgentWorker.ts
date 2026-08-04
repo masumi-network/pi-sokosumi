@@ -19,6 +19,7 @@ import {
   type SokosumiTaskSnapshot
 } from "../client/types.js";
 import type { Awaitable, SokosumiLogger } from "../sharedTypes.js";
+import { normalizeText } from "../sharedTypes.js";
 import { getErrorMessage } from "../sharedTypes.js";
 
 export type SokosumiTraceStep = {
@@ -317,7 +318,7 @@ export function startSokosumiAgentWorker<
 }
 
 export function createRunningTaskEvent(comment: string | null | undefined): SokosumiTaskEventInput {
-  const normalizedComment = String(comment || "").trim();
+  const normalizedComment = normalizeText(comment);
   return {
     status: SOKOSUMI_TASK_EVENT_STATUS.RUNNING,
     origin: "SOKOSUMI",

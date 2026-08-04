@@ -2,7 +2,14 @@ import http from "node:http";
 import type { IncomingHttpHeaders, IncomingMessage, Server, ServerResponse } from "node:http";
 import { extractSokosumiIdentityMetadata } from "../identity/resolveSokosumiIdentity.js";
 import type { Awaitable, JsonObject, JsonValue } from "../sharedTypes.js";
-import { getPathValue, getProperty, getRecordProperty, isRecord } from "../sharedTypes.js";
+import {
+  firstText,
+  getPathValue,
+  getProperty,
+  getRecordProperty,
+  isRecord,
+  normalizeText
+} from "../sharedTypes.js";
 
 export type PiAgentChatRequest = {
   agentId?: string;
@@ -112,7 +119,7 @@ export function normalizePiAgentChatRequest({
 }: NormalizePiAgentChatRequestInput = {}): PiAgentChatRequest {
   const payload = isRecord(body) ? body : {};
   const bodyMetadata = getRecordProperty(payload, "metadata");
-  const normalizedAgentId = normalizeIdentifier(firstString(
+  const normalizedAgentId = normalizeIdentifier(firstText(
     agentId,
     getProperty(payload, "agentId"),
     getProperty(payload, "agent_id"),
@@ -128,7 +135,7 @@ export function normalizePiAgentChatRequest({
     }
   }
 
-  const normalizedSurface = normalizeIdentifier(firstString(
+  const normalizedSurface = normalizeIdentifier(firstText(
     surface,
     getProperty(payload, "surface"),
     getProperty(payload, "interface"),
@@ -143,7 +150,7 @@ export function normalizePiAgentChatRequest({
   }
 
   const identity = extractSokosumiIdentityMetadata(payload, headers);
-  const organizationId = firstString(
+  const organizationId = firstText(
     getProperty(payload, "organizationId"),
     getProperty(payload, "organization_id"),
     getProperty(payload, "workspaceId"),
@@ -165,7 +172,7 @@ export function normalizePiAgentChatRequest({
   return {
     ...(normalizedAgentId ? { agentId: normalizedAgentId } : {}),
     surface: normalizedSurface,
-    userId: firstString(
+    userId: firstText(
       getProperty(payload, "userId"),
       getProperty(payload, "user_id"),
       getProperty(payload, "senderId"),
@@ -323,7 +330,7 @@ function getErrorMessage(error: unknown): string {
 }
 
 function extractMessage(body: Record<string, unknown>): string {
-  const message = firstString(
+  const message = firstText(
     getProperty(body, "message"),
     getProperty(body, "text"),
     getProperty(body, "content"),
@@ -346,7 +353,7 @@ function extractMessage(body: Record<string, unknown>): string {
     getPathValue(body, "post", "text"),
     getLastMessageText(getProperty(body, "messages"))
   );
-  return String(message || "").trim();
+  return normalizeText(message);
 }
 
 function getLastMessageText(messages: unknown): string | undefined {
@@ -366,7 +373,7 @@ function getMessageText(message: unknown): string | undefined {
   if (typeof message.body === "string") return message.body;
   if (Array.isArray(message.content)) {
     return message.content
-      .map((part) => typeof part === "string" ? part : firstString(
+      .map((part) => typeof part === "string" ? part : firstText(
         getPathValue(part, "text"),
         getPathValue(part, "content")
       ))
@@ -424,16 +431,8 @@ function includesIdentifier(values: readonly string[], value: string): boolean {
 }
 
 function normalizeIdentifier(value: unknown): string | undefined {
-  const text = firstString(value);
+  const text = firstText(value);
   return text ? text.toLowerCase() : undefined;
-}
-
-function firstString(...values: unknown[]): string | undefined {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  }
-  return undefined;
 }
 
 function headerValue(headers: IncomingHttpHeaders, name: string): string | undefined {

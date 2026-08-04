@@ -2,6 +2,7 @@ import { createHttpSokosumiClient } from "../client/httpSokosumiClient.js";
 import { createSokosumiTaskPoller } from "../poller/createSokosumiTaskPoller.js";
 import { resolveSokosumiIdentity } from "../identity/resolveSokosumiIdentity.js";
 import { SOKOSUMI_TASK_EVENT_STATUS } from "../client/types.js";
+import { normalizeText } from "../sharedTypes.js";
 import { getErrorMessage } from "../sharedTypes.js";
 export function startSokosumiAgentWorker({ enabled, apiUrl, apiKey, intervalMs = 15000, limit = 20, maxPages = 10, logger = console, runningComment = "The coworker picked up this task.", canceledComment = "The coworker canceled this task.", bootstrapComment, inputRequiredTimeoutMs, createTaskHandler, createTrace, resolveTaskContext, createStaleInputRequiredEvent, beforeTaskEventCreated, afterTaskEventCreated, client: providedClient } = {}) {
     if (!enabled) {
@@ -58,7 +59,7 @@ export function startSokosumiAgentWorker({ enabled, apiUrl, apiKey, intervalMs =
     };
 }
 export function createRunningTaskEvent(comment) {
-    const normalizedComment = String(comment || "").trim();
+    const normalizedComment = normalizeText(comment);
     return {
         status: SOKOSUMI_TASK_EVENT_STATUS.RUNNING,
         origin: "SOKOSUMI",
