@@ -1,4 +1,4 @@
-import type { MasumiNetwork } from "./masumiPaymentClient.js";
+import type { MasumiNetwork, MasumiPaymentSourceType } from "./masumiPaymentClient.js";
 import type { SokosumiMasumiPaymentPayload } from "./sokosumiMasumiPaymentPayload.js";
 export declare const MASUMI_PAYMENT_SUBMIT_STATUSES: readonly ["pending", "submitted", "dropped"];
 export type MasumiPaymentSubmitStatus = typeof MASUMI_PAYMENT_SUBMIT_STATUSES[number];
@@ -21,6 +21,7 @@ export type RecordPendingMasumiPaymentInput = PendingMasumiPaymentIdentity & {
     paymentId?: string;
     agentIdentifier?: string;
     network?: MasumiNetwork | "";
+    paymentSourceType?: MasumiPaymentSourceType | "";
     resultHash: string;
     submitStatus?: MasumiPaymentSubmitStatus;
     completionPayload?: Record<string, unknown>;
@@ -42,6 +43,7 @@ export type MasumiPendingPaymentRecord = {
     blockchainIdentifier: string;
     agentIdentifier: string;
     network: MasumiNetwork | "";
+    paymentSourceType?: MasumiPaymentSourceType;
     resultHash: string;
     submitStatus: MasumiPaymentSubmitStatus;
     masumiPayment: Record<string, unknown>;

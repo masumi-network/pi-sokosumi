@@ -114,9 +114,12 @@ export function normalizeOptionalMasumiPaymentSourceType(value) {
     return sourceType;
 }
 function normalizeOptionalMasumiPaymentSourceIndex(value) {
-    if (value === undefined || value === null || value === "")
+    if (value === undefined || value === null)
         return undefined;
-    const index = Number(value);
+    const normalizedValue = typeof value === "string" ? value.trim() : value;
+    if (normalizedValue === "")
+        return undefined;
+    const index = Number(normalizedValue);
     if (!Number.isInteger(index) || index < 0 || index > 24) {
         throw new Error("Masumi supportedPaymentSourceIndex must be an integer between 0 and 24.");
     }

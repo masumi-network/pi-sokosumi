@@ -1,4 +1,4 @@
-import { type MasumiAmount, type MasumiCreatePaymentRequestBody, type MasumiNetwork, type MasumiPaymentSource, type MasumiWallet } from "./masumiPaymentTypes.js";
+import { type MasumiAmount, type MasumiCreatePaymentRequestBody, type MasumiNetwork, type MasumiPaymentSource, type MasumiPaymentSourceType, type MasumiWallet } from "./masumiPaymentTypes.js";
 export type SokosumiMasumiPaymentPayload = {
     id?: string;
     blockchainIdentifier: string;
@@ -15,6 +15,7 @@ export type SokosumiMasumiPaymentPayload = {
         network: MasumiNetwork;
         smartContractAddress: string;
         policyId: string;
+        paymentSourceType?: MasumiPaymentSourceType;
     };
 };
 export type SokosumiMasumiPaymentPayloadInput = Record<string, unknown> & {

@@ -1,5 +1,5 @@
 import { createJsonValidators } from "../sharedTypes.js";
-import { MASUMI_NETWORKS, MasumiPaymentError } from "./masumiPaymentTypes.js";
+import { MASUMI_NETWORKS, MASUMI_PAYMENT_SOURCE_TYPES, MasumiPaymentError } from "./masumiPaymentTypes.js";
 const { expectLiteral, expectRecord } = createJsonValidators(throwInvalidResponse);
 export function createSokosumiMasumiPaymentPayload(payment = {}) {
     const source = expectRecord(payment, "Masumi payment payload");
@@ -8,7 +8,7 @@ export function createSokosumiMasumiPaymentPayload(payment = {}) {
         : expectRecord(source.requestBody, "Masumi payment payload.requestBody");
     const smartContractWalletVkey = walletVkey(source.SmartContractWallet, "Masumi payment payload.SmartContractWallet");
     const sellerWalletVkey = walletVkey(source.SellerWallet, "Masumi payment payload.SellerWallet");
-    const paymentSource = narrowPaymentSource(source.PaymentSource, requestBody.network);
+    const paymentSource = narrowPaymentSource(source.PaymentSource, requestBody.network, requestBody.paymentSourceType);
     const id = narrowOptionalNonEmptyString(source.id, "Masumi payment payload.id");
     return {
         ...(id ? { id } : {}),
@@ -37,7 +37,7 @@ function narrowAmounts(value, label) {
         };
     });
 }
-function narrowPaymentSource(value, fallbackNetwork) {
+function narrowPaymentSource(value, fallbackNetwork, fallbackPaymentSourceType) {
     if (value === undefined || value === null)
         return undefined;
     const source = expectRecord(value, "Masumi payment payload.PaymentSource");
@@ -45,10 +45,16 @@ function narrowPaymentSource(value, fallbackNetwork) {
     // PaymentSource. The field is optional on Sokosumi, so omit an unmappable source.
     if (source.policyId === undefined || source.policyId === null)
         return undefined;
+    const paymentSourceType = source.paymentSourceType ?? fallbackPaymentSourceType;
     return {
         network: expectLiteral(source.network ?? fallbackNetwork, MASUMI_NETWORKS, "Masumi payment payload.PaymentSource.network"),
         smartContractAddress: narrowNonEmptyString(source.smartContractAddress, "Masumi payment payload.PaymentSource.smartContractAddress"),
-        policyId: narrowNonEmptyString(source.policyId, "Masumi payment payload.PaymentSource.policyId")
+        policyId: narrowNonEmptyString(source.policyId, "Masumi payment payload.PaymentSource.policyId"),
+        ...(paymentSourceType === undefined || paymentSourceType === null || paymentSourceType === ""
+            ? {}
+            : {
+                paymentSourceType: expectLiteral(paymentSourceType, MASUMI_PAYMENT_SOURCE_TYPES, "Masumi payment payload.PaymentSource.paymentSourceType")
+            })
     };
 }
 function walletVkey(value, label) {

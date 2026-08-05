@@ -212,7 +212,8 @@ const eventPaymentPayload: SokosumiMasumiPaymentPayload = {
   PaymentSource: {
     network: "Preprod",
     smartContractAddress: "addr_test_contract",
-    policyId: "policy"
+    policyId: "policy",
+    paymentSourceType: "Web3CardanoV1"
   }
 };
 void httpClient.getCurrentCoworker();

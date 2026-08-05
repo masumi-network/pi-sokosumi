@@ -47,7 +47,9 @@ Both fields can also be supplied per payment to override the client defaults.
 Payment listing also uses the configured source type by default so settlement
 polling reads the same V1 or V2 source that payment creation selected. An
 explicit smart-contract-address filter remains authoritative and does not add a
-source-type filter unless the caller supplies one.
+source-type filter unless the caller supplies one. Completion payloads and
+pending-payment records preserve the effective source type so a per-payment
+override is polled against the source that actually created it.
 
 ## Amounts
 
