@@ -152,6 +152,45 @@ test("HTTP Sokosumi client accepts cancellation events returned by the coworker 
   assert.equal(result.events[0].status, "CANCEL_REQUESTED");
 });
 
+test("HTTP Sokosumi client normalizes nullable pagination cursors from the coworker feed", async () => {
+  const client = createHttpSokosumiClient({
+    apiUrl: "https://sokosumi.example.test",
+    apiKey: "test-key",
+    fetchImpl: async () => new Response(JSON.stringify({
+      data: [],
+      meta: {
+        pagination: {
+          nextCursor: null,
+          previousCursor: null,
+          hasMore: false
+        }
+      }
+    }), { status: 200 })
+  });
+
+  const result = await client.listCoworkerEvents();
+
+  assert.deepEqual(result.pagination, { hasMore: false });
+});
+
+test("HTTP Sokosumi client rejects non-string pagination cursors from the coworker feed", async () => {
+  for (const field of ["nextCursor", "previousCursor"]) {
+    const client = createHttpSokosumiClient({
+      apiUrl: "https://sokosumi.example.test",
+      apiKey: "test-key",
+      fetchImpl: async () => new Response(JSON.stringify({
+        data: [],
+        meta: { pagination: { [field]: 42 } }
+      }), { status: 200 })
+    });
+
+    await assert.rejects(
+      client.listCoworkerEvents(),
+      new RegExp(`Sokosumi pagination\\.${field} must be a string when provided\\.`)
+    );
+  }
+});
+
 test("HTTP Sokosumi client rejects missing required inputs before sending a request", async () => {
   let requestCount = 0;
   const client = createHttpSokosumiClient({
