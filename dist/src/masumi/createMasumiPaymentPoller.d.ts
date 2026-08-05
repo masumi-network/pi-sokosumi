@@ -1,5 +1,5 @@
 import type { SokosumiLogger } from "../sharedTypes.js";
-import type { MasumiListPaymentsInput, MasumiNetwork, MasumiOnChainState, MasumiPaymentAction, MasumiPaymentErrorType, MasumiSubmitResultInput, MasumiSubmitResultResponse } from "./masumiPaymentClient.js";
+import type { MasumiListPaymentsInput, MasumiNetwork, MasumiOnChainState, MasumiPaymentAction, MasumiPaymentErrorType, MasumiPaymentSourceType, MasumiSubmitResultInput, MasumiSubmitResultResponse } from "./masumiPaymentClient.js";
 import type { ListPendingMasumiPaymentsInput, MarkMasumiDroppedInput, MarkMasumiSubmittedInput, MasumiPendingPaymentRecord } from "./masumiPaymentStore.js";
 export type MasumiPaymentPollerPayment = Record<string, unknown> & {
     blockchainIdentifier: string;
@@ -12,6 +12,7 @@ export type MasumiPaymentPollerPayment = Record<string, unknown> & {
     onChainState?: MasumiOnChainState | null;
     PaymentSource?: Record<string, unknown> & {
         network?: MasumiNetwork;
+        paymentSourceType?: MasumiPaymentSourceType;
     };
 };
 export type MasumiPaymentPollerListPage = Record<string, unknown> & {

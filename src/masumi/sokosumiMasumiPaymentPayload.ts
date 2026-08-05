@@ -1,11 +1,13 @@
 import { createJsonValidators } from "../sharedTypes.js";
 import {
   MASUMI_NETWORKS,
+  MASUMI_PAYMENT_SOURCE_TYPES,
   MasumiPaymentError,
   type MasumiAmount,
   type MasumiCreatePaymentRequestBody,
   type MasumiNetwork,
   type MasumiPaymentSource,
+  type MasumiPaymentSourceType,
   type MasumiWallet
 } from "./masumiPaymentTypes.js";
 
@@ -25,6 +27,7 @@ export type SokosumiMasumiPaymentPayload = {
     network: MasumiNetwork;
     smartContractAddress: string;
     policyId: string;
+    paymentSourceType?: MasumiPaymentSourceType;
   };
 };
 
@@ -69,7 +72,8 @@ export function createSokosumiMasumiPaymentPayload(
   );
   const paymentSource = narrowPaymentSource(
     source.PaymentSource,
-    requestBody.network
+    requestBody.network,
+    requestBody.paymentSourceType
   );
   const id = narrowOptionalNonEmptyString(source.id, "Masumi payment payload.id");
 
@@ -137,7 +141,8 @@ function narrowAmounts(
 
 function narrowPaymentSource(
   value: unknown,
-  fallbackNetwork: unknown
+  fallbackNetwork: unknown,
+  fallbackPaymentSourceType: unknown
 ): SokosumiMasumiPaymentPayload["PaymentSource"] {
   if (value === undefined || value === null) return undefined;
   const source = expectRecord(value, "Masumi payment payload.PaymentSource");
@@ -146,6 +151,7 @@ function narrowPaymentSource(
   // PaymentSource. The field is optional on Sokosumi, so omit an unmappable source.
   if (source.policyId === undefined || source.policyId === null) return undefined;
 
+  const paymentSourceType = source.paymentSourceType ?? fallbackPaymentSourceType;
   return {
     network: expectLiteral(
       source.network ?? fallbackNetwork,
@@ -159,7 +165,16 @@ function narrowPaymentSource(
     policyId: narrowNonEmptyString(
       source.policyId,
       "Masumi payment payload.PaymentSource.policyId"
-    )
+    ),
+    ...(paymentSourceType === undefined || paymentSourceType === null || paymentSourceType === ""
+      ? {}
+      : {
+          paymentSourceType: expectLiteral(
+            paymentSourceType,
+            MASUMI_PAYMENT_SOURCE_TYPES,
+            "Masumi payment payload.PaymentSource.paymentSourceType"
+          )
+        })
   };
 }
 

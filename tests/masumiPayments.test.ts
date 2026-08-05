@@ -198,6 +198,14 @@ test("Masumi payment client validates Cardano payment source selection", async (
     }),
     /supportedPaymentSourceIndex must be an integer between 0 and 24/
   );
+  assert.throws(
+    () => createMasumiPaymentClient({
+      ...baseOptions,
+      paymentSourceType: "Web3CardanoV2",
+      supportedPaymentSourceIndex: "   "
+    }),
+    /Web3CardanoV2 payments require supportedPaymentSourceIndex/
+  );
 });
 
 test("Masumi per-payment source override does not leak the configured V2 index into V1", async () => {
@@ -444,6 +452,7 @@ test("Masumi completion hooks attach payment data and persist exact payload hash
   });
   assert.equal(taskEvent.masumiPayment.id, "payment-hook");
   assert.equal(taskEvent.masumiPayment.sellerVkey, "seller-vkey");
+  assert.equal(taskEvent.masumiPayment.PaymentSource.paymentSourceType, "Web3CardanoV1");
   assert.equal("credits" in taskEvent, false);
 
   await hooks.afterTaskEventCreated({
@@ -457,6 +466,7 @@ test("Masumi completion hooks attach payment data and persist exact payload hash
   assert.equal(pending.length, 1);
   assert.equal(pending[0].taskId, "task-hook");
   assert.equal(pending[0].blockchainIdentifier, "blockchain-hook");
+  assert.equal(pending[0].paymentSourceType, "Web3CardanoV1");
   assert.equal(pending[0].resultHash, sha256Hex(canonicalJson(taskEvent)));
   assert.deepEqual(pending[0].completionPayload, taskEvent);
 });
@@ -554,6 +564,46 @@ test("Masumi payment poller submits results when funds are locked", async () => 
     }
   ]);
   assert.equal((await store.listPendingMasumiPayments()).length, 0);
+});
+
+test("Masumi payment poller preserves a per-payment source override", async () => {
+  const store = createMemoryMasumiPaymentStore();
+  await store.recordPendingMasumiPayment({
+    taskId: "task-source-override",
+    blockchainIdentifier: "blockchain-source-override",
+    resultHash: sha256Hex("result"),
+    network: "Preprod",
+    masumiPayment: {
+      id: "payment-source-override",
+      blockchainIdentifier: "blockchain-source-override",
+      PaymentSource: {
+        network: "Preprod",
+        paymentSourceType: "Web3CardanoV1"
+      }
+    },
+    completionPayload: {
+      status: "COMPLETED"
+    }
+  });
+
+  const listInputs: any[] = [];
+  const poller = createMasumiPaymentPoller({
+    client: {
+      async listPayments(input: any) {
+        listInputs.push(input);
+        return { Payments: [] };
+      },
+      async submitResult() {
+        throw new Error("should not submit");
+      }
+    },
+    store,
+    logger: { log() {}, warn() {}, error() {} }
+  });
+
+  await poller.tick();
+
+  assert.equal(listInputs[0].filterPaymentSourceType, "Web3CardanoV1");
 });
 
 test("Masumi payment poller drops errored payments", async () => {

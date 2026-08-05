@@ -6,6 +6,7 @@ import type {
   MasumiOnChainState,
   MasumiPaymentAction,
   MasumiPaymentErrorType,
+  MasumiPaymentSourceType,
   MasumiSubmitResultInput,
   MasumiSubmitResultResponse
 } from "./masumiPaymentClient.js";
@@ -27,6 +28,7 @@ export type MasumiPaymentPollerPayment = Record<string, unknown> & {
   onChainState?: MasumiOnChainState | null;
   PaymentSource?: Record<string, unknown> & {
     network?: MasumiNetwork;
+    paymentSourceType?: MasumiPaymentSourceType;
   };
 };
 
@@ -217,13 +219,27 @@ export function createMasumiPaymentPoller<TRecord extends MasumiPendingPaymentRe
   }
 
   async function findPayment(record: TRecord): Promise<MasumiPaymentPollerPayment | undefined> {
+    const paymentSourceType = paymentSourceTypeFromRecord(record);
     const result = await client!.listPayments({
       limit: 100,
-      network: record.network || undefined
+      network: record.network || undefined,
+      ...(paymentSourceType ? { filterPaymentSourceType: paymentSourceType } : {})
     });
     const payments = Array.isArray(result) ? result : Array.isArray(result.Payments) ? result.Payments : [];
     return payments.find((payment) => payment.blockchainIdentifier === record.blockchainIdentifier);
   }
+}
+
+function paymentSourceTypeFromRecord(record: MasumiPendingPaymentRecord): MasumiPaymentSourceType | undefined {
+  if (record.paymentSourceType === "Web3CardanoV1" || record.paymentSourceType === "Web3CardanoV2") {
+    return record.paymentSourceType;
+  }
+  const paymentSource = record.masumiPayment.PaymentSource;
+  if (!paymentSource || typeof paymentSource !== "object" || Array.isArray(paymentSource)) return undefined;
+  const paymentSourceType = (paymentSource as Record<string, unknown>).paymentSourceType;
+  return paymentSourceType === "Web3CardanoV1" || paymentSourceType === "Web3CardanoV2"
+    ? paymentSourceType
+    : undefined;
 }
 
 export function isReadyForSubmitResult(payment: MasumiPaymentPollerPayment): boolean {

@@ -61,6 +61,7 @@ export function normalizePendingPayment(input) {
     const masumiPayment = normalizeJsonObject(input.masumiPayment);
     const blockchainIdentifier = normalizeRequiredText(input.blockchainIdentifier || masumiPayment.blockchainIdentifier, "blockchainIdentifier");
     const network = normalizeOptionalText(input.network || paymentSourceNetwork(masumiPayment));
+    const paymentSourceType = normalizePaymentSourceType(input.paymentSourceType || paymentSourceTypeFromPayment(masumiPayment));
     return {
         id: normalizeOptionalText(input.id || input.paymentId || masumiPayment.id) || `masumi_${blockchainIdentifier.slice(0, 24)}`,
         taskId: normalizeRequiredText(input.taskId, "taskId"),
@@ -70,6 +71,7 @@ export function normalizePendingPayment(input) {
         blockchainIdentifier,
         agentIdentifier: normalizeOptionalText(input.agentIdentifier || masumiPayment.agentIdentifier),
         network: network === "Preprod" || network === "Mainnet" ? network : "",
+        ...(paymentSourceType ? { paymentSourceType } : {}),
         resultHash: normalizeRequiredText(input.resultHash, "resultHash"),
         submitStatus: normalizeSubmitStatus(input.submitStatus || "pending"),
         masumiPayment,
@@ -114,6 +116,18 @@ function normalizeJsonObject(value) {
 function paymentSourceNetwork(payment) {
     const source = payment.PaymentSource;
     return isRecord(source) ? source.network : undefined;
+}
+function paymentSourceTypeFromPayment(payment) {
+    const source = payment.PaymentSource;
+    return isRecord(source) ? source.paymentSourceType : undefined;
+}
+function normalizePaymentSourceType(value) {
+    const text = normalizeOptionalText(value);
+    if (!text)
+        return undefined;
+    if (text === "Web3CardanoV1" || text === "Web3CardanoV2")
+        return text;
+    throw new Error(`Unsupported Masumi payment source type: ${value}`);
 }
 function normalizeLimit(value, fallback) {
     const number = Number(value);

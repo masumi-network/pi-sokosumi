@@ -1,4 +1,4 @@
-import type { MasumiNetwork } from "./masumiPaymentClient.js";
+import type { MasumiNetwork, MasumiPaymentSourceType } from "./masumiPaymentClient.js";
 import type { SokosumiMasumiPaymentPayload } from "./sokosumiMasumiPaymentPayload.js";
 import { isRecord, normalizeText } from "../sharedTypes.js";
 
@@ -26,6 +26,7 @@ export type RecordPendingMasumiPaymentInput = PendingMasumiPaymentIdentity & {
   paymentId?: string;
   agentIdentifier?: string;
   network?: MasumiNetwork | "";
+  paymentSourceType?: MasumiPaymentSourceType | "";
   resultHash: string;
   submitStatus?: MasumiPaymentSubmitStatus;
   completionPayload?: Record<string, unknown>;
@@ -48,6 +49,7 @@ export type MasumiPendingPaymentRecord = {
   blockchainIdentifier: string;
   agentIdentifier: string;
   network: MasumiNetwork | "";
+  paymentSourceType?: MasumiPaymentSourceType;
   resultHash: string;
   submitStatus: MasumiPaymentSubmitStatus;
   masumiPayment: Record<string, unknown>;
@@ -174,6 +176,9 @@ export function normalizePendingPayment(input: RecordPendingMasumiPaymentInput):
     "blockchainIdentifier"
   );
   const network = normalizeOptionalText(input.network || paymentSourceNetwork(masumiPayment));
+  const paymentSourceType = normalizePaymentSourceType(
+    input.paymentSourceType || paymentSourceTypeFromPayment(masumiPayment)
+  );
 
   return {
     id: normalizeOptionalText(input.id || input.paymentId || masumiPayment.id) || `masumi_${blockchainIdentifier.slice(0, 24)}`,
@@ -184,6 +189,7 @@ export function normalizePendingPayment(input: RecordPendingMasumiPaymentInput):
     blockchainIdentifier,
     agentIdentifier: normalizeOptionalText(input.agentIdentifier || masumiPayment.agentIdentifier),
     network: network === "Preprod" || network === "Mainnet" ? network : "",
+    ...(paymentSourceType ? { paymentSourceType } : {}),
     resultHash: normalizeRequiredText(input.resultHash, "resultHash"),
     submitStatus: normalizeSubmitStatus(input.submitStatus || "pending"),
     masumiPayment,
@@ -233,6 +239,18 @@ function normalizeJsonObject(value: unknown): Record<string, unknown> {
 function paymentSourceNetwork(payment: Record<string, unknown>): unknown {
   const source = payment.PaymentSource;
   return isRecord(source) ? source.network : undefined;
+}
+
+function paymentSourceTypeFromPayment(payment: Record<string, unknown>): unknown {
+  const source = payment.PaymentSource;
+  return isRecord(source) ? source.paymentSourceType : undefined;
+}
+
+function normalizePaymentSourceType(value: unknown): MasumiPaymentSourceType | undefined {
+  const text = normalizeOptionalText(value);
+  if (!text) return undefined;
+  if (text === "Web3CardanoV1" || text === "Web3CardanoV2") return text;
+  throw new Error(`Unsupported Masumi payment source type: ${value}`);
 }
 
 function normalizeLimit(value: unknown, fallback: number): number {

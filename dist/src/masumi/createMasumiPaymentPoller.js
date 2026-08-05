@@ -108,13 +108,27 @@ export function createMasumiPaymentPoller({ enabled = true, client, store, inter
         });
     }
     async function findPayment(record) {
+        const paymentSourceType = paymentSourceTypeFromRecord(record);
         const result = await client.listPayments({
             limit: 100,
-            network: record.network || undefined
+            network: record.network || undefined,
+            ...(paymentSourceType ? { filterPaymentSourceType: paymentSourceType } : {})
         });
         const payments = Array.isArray(result) ? result : Array.isArray(result.Payments) ? result.Payments : [];
         return payments.find((payment) => payment.blockchainIdentifier === record.blockchainIdentifier);
     }
+}
+function paymentSourceTypeFromRecord(record) {
+    if (record.paymentSourceType === "Web3CardanoV1" || record.paymentSourceType === "Web3CardanoV2") {
+        return record.paymentSourceType;
+    }
+    const paymentSource = record.masumiPayment.PaymentSource;
+    if (!paymentSource || typeof paymentSource !== "object" || Array.isArray(paymentSource))
+        return undefined;
+    const paymentSourceType = paymentSource.paymentSourceType;
+    return paymentSourceType === "Web3CardanoV1" || paymentSourceType === "Web3CardanoV2"
+        ? paymentSourceType
+        : undefined;
 }
 export function isReadyForSubmitResult(payment) {
     return payment.NextAction?.requestedAction === "SubmitResultRequested" || payment.onChainState === "FundsLocked";
