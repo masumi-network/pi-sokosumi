@@ -2,9 +2,15 @@
 
 ## Unreleased
 
+## 0.1.7
+
 - Added typed `Web3CardanoV2` payment-source selection to Masumi payment
   creation and listing, including the required supported-source index, runtime
   validation, and source-aware settlement polling.
+- Normalized nullable Sokosumi pagination cursors at the HTTP boundary so API
+  `null` values no longer violate the public client contract.
+- Scoped Masumi settlement polling to the configured payment source while
+  preserving per-payment V1/V2 source overrides.
 
 ## 0.1.6
 
