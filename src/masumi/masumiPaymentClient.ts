@@ -35,6 +35,7 @@ import {
   normalizeHex,
   normalizeMasumiApiUrl,
   normalizeMasumiNetwork,
+  normalizeMasumiPaymentSourceSelection,
   normalizePaymentMetadata,
   normalizePositiveInteger,
   normalizeRequestedFunds,
@@ -72,6 +73,8 @@ export function createMasumiPaymentClient({
   agentIdentifier,
   network = "Preprod",
   paymentUnit,
+  paymentSourceType,
+  supportedPaymentSourceIndex,
   fetchImpl = fetch,
   timeoutMs = 30000,
   now = () => new Date()
@@ -80,6 +83,10 @@ export function createMasumiPaymentClient({
   const normalizedNetwork = normalizeMasumiNetwork(network);
   const unit = normalizeRequiredText(paymentUnit || MASUMI_USDM_UNITS[normalizedNetwork], "paymentUnit");
   const configuredAgentIdentifier = normalizeRequiredText(agentIdentifier, "agentIdentifier");
+  const configuredPaymentSource = normalizeMasumiPaymentSourceSelection(
+    paymentSourceType,
+    supportedPaymentSourceIndex
+  );
 
   return {
     apiUrl: baseUrl,
@@ -101,6 +108,13 @@ export function createMasumiPaymentClient({
         amountRawUnits,
         unit
       });
+      const inputOverridesPaymentSource = input.paymentSourceType !== undefined;
+      const selectedPaymentSource = normalizeMasumiPaymentSourceSelection(
+        input.paymentSourceType ?? configuredPaymentSource.paymentSourceType,
+        inputOverridesPaymentSource
+          ? input.supportedPaymentSourceIndex
+          : input.supportedPaymentSourceIndex ?? configuredPaymentSource.supportedPaymentSourceIndex
+      );
       const body: MasumiCreatePaymentRequestBody = {
         agentIdentifier: normalizeRequiredText(input.agentIdentifier || configuredAgentIdentifier, "agentIdentifier"),
         network: normalizeMasumiNetwork(input.network || normalizedNetwork),
@@ -116,7 +130,8 @@ export function createMasumiPaymentClient({
           input.identifierFromPurchaser || randomBytes(8).toString("hex"),
           "identifierFromPurchaser"
         ),
-        RequestedFunds: requestedFunds
+        RequestedFunds: requestedFunds,
+        ...selectedPaymentSource
       };
 
       const payload = await request("/payment", {

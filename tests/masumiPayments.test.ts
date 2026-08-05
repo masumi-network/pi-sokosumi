@@ -89,6 +89,110 @@ test("Masumi payment client creates dynamic cent-denominated payments", async ()
   assert.equal(payment.NextAction.requestedAction, "WaitingForExternalAction");
 });
 
+test("Masumi payment client sends Web3CardanoV2 payment source selection", async () => {
+  const requests: any[] = [];
+  const client = createMasumiPaymentClient({
+    apiUrl: "https://masumi.example.test/api/v1",
+    apiToken: "payment-token",
+    agentIdentifier: "agent-v2",
+    network: "Preprod",
+    paymentSourceType: "Web3CardanoV2",
+    supportedPaymentSourceIndex: 0,
+    async fetchImpl(url: string, options: any) {
+      requests.push({
+        url,
+        body: JSON.parse(options.body)
+      });
+      return jsonResponse({
+        status: "success",
+        data: masumiPaymentResponse({
+          id: "payment-v2",
+          blockchainIdentifier: "blockchain-v2",
+          agentIdentifier: "agent-v2",
+          PaymentSource: {
+            id: "source-v2",
+            network: "Preprod",
+            paymentSourceType: "Web3CardanoV2",
+            smartContractAddress: "addr_test_v2_contract",
+            policyId: "policy-v2"
+          }
+        })
+      });
+    }
+  });
+
+  const payment = await client.createPayment({
+    taskId: "task-v2",
+    costCents: 1
+  });
+
+  assert.equal(requests[0].body.paymentSourceType, "Web3CardanoV2");
+  assert.equal(requests[0].body.supportedPaymentSourceIndex, 0);
+  assert.equal(payment.requestBody.paymentSourceType, "Web3CardanoV2");
+  assert.equal(payment.requestBody.supportedPaymentSourceIndex, 0);
+});
+
+test("Masumi payment client validates Cardano payment source selection", async () => {
+  const baseOptions = {
+    apiUrl: "https://masumi.example.test/api/v1",
+    apiToken: "payment-token",
+    agentIdentifier: "agent-source-validation"
+  };
+
+  assert.throws(
+    () => createMasumiPaymentClient({
+      ...baseOptions,
+      paymentSourceType: "Web3CardanoV2"
+    }),
+    /Web3CardanoV2 payments require supportedPaymentSourceIndex/
+  );
+  assert.throws(
+    () => createMasumiPaymentClient({
+      ...baseOptions,
+      paymentSourceType: "Web3CardanoV1",
+      supportedPaymentSourceIndex: 0
+    }),
+    /Web3CardanoV1 payments must not set supportedPaymentSourceIndex/
+  );
+  assert.throws(
+    () => createMasumiPaymentClient({
+      ...baseOptions,
+      supportedPaymentSourceIndex: 25
+    }),
+    /supportedPaymentSourceIndex must be an integer between 0 and 24/
+  );
+});
+
+test("Masumi per-payment source override does not leak the configured V2 index into V1", async () => {
+  const requests: any[] = [];
+  const client = createMasumiPaymentClient({
+    apiUrl: "https://masumi.example.test/api/v1",
+    apiToken: "payment-token",
+    agentIdentifier: "agent-source-override",
+    paymentSourceType: "Web3CardanoV2",
+    supportedPaymentSourceIndex: 0,
+    async fetchImpl(_url: string, options: any) {
+      requests.push(JSON.parse(options.body));
+      return jsonResponse({
+        status: "success",
+        data: masumiPaymentResponse({
+          id: "payment-v1-override",
+          blockchainIdentifier: "blockchain-v1-override"
+        })
+      });
+    }
+  });
+
+  await client.createPayment({
+    taskId: "task-v1-override",
+    costCents: 1,
+    paymentSourceType: "Web3CardanoV1"
+  });
+
+  assert.equal(requests[0].paymentSourceType, "Web3CardanoV1");
+  assert.equal(requests[0].supportedPaymentSourceIndex, undefined);
+});
+
 test("Masumi raw unit conversion follows the charged Sokosumi credits", async () => {
   assert.equal(creditsToMasumiRawUnits(1).toString(), "10000");
   assert.equal(creditsToMasumiRawUnits(0.13).toString(), "1300");

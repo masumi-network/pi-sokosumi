@@ -31,11 +31,19 @@ const client = createMasumiPaymentClient({
   apiUrl: process.env.MASUMI_PAYMENT_API_URL,
   apiToken: process.env.MASUMI_PAYMENT_API_TOKEN,
   agentIdentifier,
-  network: normalizeMasumiNetwork(process.env.MASUMI_NETWORK || "Preprod")
+  network: normalizeMasumiNetwork(process.env.MASUMI_NETWORK || "Preprod"),
+  paymentSourceType: "Web3CardanoV2",
+  supportedPaymentSourceIndex: 0
 });
 ```
 
 `apiUrl` can point at the admin origin or at `/api/v1`; it is normalized internally.
+
+For an agent registered with a `Web3CardanoV2` payment source, set
+`paymentSourceType` and its zero-based `supportedPaymentSourceIndex`. The index
+selects the corresponding source in the agent's registry metadata. Explicit V2
+selection requires an index; explicit `Web3CardanoV1` selection forbids one.
+Both fields can also be supplied per payment to override the client defaults.
 
 ## Amounts
 

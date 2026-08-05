@@ -24,7 +24,8 @@ export {
 } from "./masumiAmounts.js";
 export {
   normalizeMasumiApiUrl,
-  normalizeMasumiNetwork
+  normalizeMasumiNetwork,
+  normalizeMasumiPaymentSourceSelection
 } from "./masumiPaymentInput.js";
 export {
   canonicalJson,
@@ -58,6 +59,7 @@ export type {
   MasumiPaymentNextAction,
   MasumiPaymentRequestedAction,
   MasumiPaymentSource,
+  MasumiPaymentSourceSelection,
   MasumiPaymentSourceType,
   MasumiPaymentTransaction,
   MasumiPricingType,

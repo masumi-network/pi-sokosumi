@@ -23,6 +23,20 @@ export type MasumiRequestedFundInput = {
   unit: string;
 };
 
+export type MasumiPaymentSourceSelection =
+  | {
+      paymentSourceType?: undefined;
+      supportedPaymentSourceIndex?: number;
+    }
+  | {
+      paymentSourceType: "Web3CardanoV1";
+      supportedPaymentSourceIndex?: never;
+    }
+  | {
+      paymentSourceType: "Web3CardanoV2";
+      supportedPaymentSourceIndex: number;
+    };
+
 export type MasumiAmount = {
   amount: string;
   unit: string;
@@ -45,7 +59,7 @@ export type MasumiCreatePaymentInput = {
   inputHash?: string;
   metadata?: string | Record<string, unknown>;
   identifierFromPurchaser?: string;
-};
+} & MasumiPaymentSourceSelection;
 
 export type MasumiCreatePaymentRequestBody = {
   agentIdentifier: string;
@@ -56,7 +70,7 @@ export type MasumiCreatePaymentRequestBody = {
   metadata: string;
   identifierFromPurchaser: string;
   RequestedFunds: MasumiAmount[];
-};
+} & MasumiPaymentSourceSelection;
 
 export const MASUMI_PAYMENT_ACTIONS = [
   "None",
@@ -251,7 +265,7 @@ export type MasumiPaymentClientOptions = {
   fetchImpl?: MasumiFetch;
   timeoutMs?: number;
   now?: () => Date;
-};
+} & MasumiPaymentSourceSelection;
 
 export type MasumiPaymentClient = {
   readonly apiUrl: string;
