@@ -773,6 +773,7 @@ void masumiClient.listPayments({
   limit: 100,
   cursorId: "cursor",
   filterSmartContractAddress: "address",
+  filterPaymentSourceType: "Web3CardanoV2",
   includeHistory: true
 });
 const submitResultPromise = masumiClient.submitResult({

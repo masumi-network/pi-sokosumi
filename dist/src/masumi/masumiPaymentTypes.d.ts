@@ -167,6 +167,7 @@ export type MasumiListPaymentsInput = {
     limit?: number;
     cursorId?: string | number;
     filterSmartContractAddress?: string;
+    filterPaymentSourceType?: MasumiPaymentSourceType;
     includeHistory?: boolean;
 };
 export type MasumiListPaymentsPage = Record<string, unknown> & {
