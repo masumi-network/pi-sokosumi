@@ -435,7 +435,9 @@ function narrowTaskEvent(value: unknown, label: string): SokosumiTaskEvent {
 }
 
 function narrowPagination(value: unknown): SokosumiPagination {
-  const pagination = expectRecord(value, "Sokosumi pagination");
+  const pagination = { ...expectRecord(value, "Sokosumi pagination") };
+  if (pagination.nextCursor === null) delete pagination.nextCursor;
+  if (pagination.previousCursor === null) delete pagination.previousCursor;
   assertOptionalString(pagination.nextCursor, "Sokosumi pagination.nextCursor");
   assertOptionalString(pagination.previousCursor, "Sokosumi pagination.previousCursor");
   if (pagination.hasMore !== undefined && typeof pagination.hasMore !== "boolean") {
