@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added typed `Web3CardanoV2` payment-source selection to Masumi payment
+  creation, including the required supported-source index and runtime validation.
+
 ## 0.1.6
 
 - Added a reusable, status-neutral `sokosumi_comment_on_task` tool for

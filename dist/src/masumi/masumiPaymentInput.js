@@ -1,6 +1,7 @@
 import { stripTrailingSlash } from "../jsonHttpTransport.js";
 import { isRecord, normalizeText } from "../sharedTypes.js";
 import { creditsToMasumiCostCents, creditsToMasumiRawUnits, masumiCentsToRawUnits, normalizeMasumiCostCents, normalizeMasumiRawUnits, usdToMasumiCostCents } from "./masumiAmounts.js";
+import { MASUMI_PAYMENT_SOURCE_TYPES } from "./masumiPaymentTypes.js";
 export function normalizeMasumiNetwork(value) {
     const text = normalizeText(value);
     if (text.toLowerCase() === "mainnet")
@@ -8,6 +9,26 @@ export function normalizeMasumiNetwork(value) {
     if (text.toLowerCase() === "preprod" || text.toLowerCase() === "preproduction")
         return "Preprod";
     throw new Error(`Unsupported Masumi network: ${value}`);
+}
+export function normalizeMasumiPaymentSourceSelection(paymentSourceType, supportedPaymentSourceIndex) {
+    const sourceType = normalizeOptionalMasumiPaymentSourceType(paymentSourceType);
+    const sourceIndex = normalizeOptionalMasumiPaymentSourceIndex(supportedPaymentSourceIndex);
+    if (sourceType === "Web3CardanoV1") {
+        if (sourceIndex !== undefined) {
+            throw new Error("Masumi Web3CardanoV1 payments must not set supportedPaymentSourceIndex.");
+        }
+        return { paymentSourceType: sourceType };
+    }
+    if (sourceType === "Web3CardanoV2") {
+        if (sourceIndex === undefined) {
+            throw new Error("Masumi Web3CardanoV2 payments require supportedPaymentSourceIndex.");
+        }
+        return {
+            paymentSourceType: sourceType,
+            supportedPaymentSourceIndex: sourceIndex
+        };
+    }
+    return sourceIndex === undefined ? {} : { supportedPaymentSourceIndex: sourceIndex };
 }
 export function normalizeMasumiApiUrl(value) {
     const text = stripTrailingSlash(normalizeText(value));
@@ -82,6 +103,24 @@ export function normalizeRequiredText(value, label) {
 export function normalizePositiveInteger(value, fallback) {
     const number = Number(value);
     return Number.isInteger(number) && number > 0 ? number : fallback;
+}
+function normalizeOptionalMasumiPaymentSourceType(value) {
+    const text = normalizeText(value);
+    if (!text)
+        return undefined;
+    const sourceType = MASUMI_PAYMENT_SOURCE_TYPES.find((candidate) => candidate === text);
+    if (!sourceType)
+        throw new Error(`Unsupported Masumi payment source type: ${value}`);
+    return sourceType;
+}
+function normalizeOptionalMasumiPaymentSourceIndex(value) {
+    if (value === undefined || value === null || value === "")
+        return undefined;
+    const index = Number(value);
+    if (!Number.isInteger(index) || index < 0 || index > 24) {
+        throw new Error("Masumi supportedPaymentSourceIndex must be an integer between 0 and 24.");
+    }
+    return index;
 }
 export function toDate(value, label) {
     const date = value instanceof Date ? value : new Date(value);

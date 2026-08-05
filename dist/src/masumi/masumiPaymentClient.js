@@ -2,18 +2,19 @@ import { randomBytes } from "node:crypto";
 import { requestJson } from "../jsonHttpTransport.js";
 import { createJsonValidators, isRecord } from "../sharedTypes.js";
 import { MASUMI_DEFAULT_PAY_BY_MS, MASUMI_DEFAULT_SUBMIT_RESULT_MS, MASUMI_NETWORKS, MASUMI_ON_CHAIN_STATES, MASUMI_PAYMENT_ACTIONS, MASUMI_PAYMENT_ERROR_TYPES, MASUMI_PAYMENT_SOURCE_TYPES, MASUMI_PRICING_TYPES, MASUMI_TRANSACTION_STATUSES, MASUMI_USDM_UNITS, MasumiPaymentError } from "./masumiPaymentTypes.js";
-import { addMs, normalizeHex, normalizeMasumiApiUrl, normalizeMasumiNetwork, normalizePaymentMetadata, normalizePositiveInteger, normalizeRequestedFunds, normalizeRequiredText, resolveMasumiAmountRawUnits, resolveMasumiCostCents, toDate } from "./masumiPaymentInput.js";
+import { addMs, normalizeHex, normalizeMasumiApiUrl, normalizeMasumiNetwork, normalizeMasumiPaymentSourceSelection, normalizePaymentMetadata, normalizePositiveInteger, normalizeRequestedFunds, normalizeRequiredText, resolveMasumiAmountRawUnits, resolveMasumiCostCents, toDate } from "./masumiPaymentInput.js";
 import { sha256Hex } from "./masumiSerialization.js";
 export * from "./masumiPaymentTypes.js";
 export * from "./masumiAmounts.js";
 export * from "./masumiPaymentInput.js";
 export * from "./masumiSerialization.js";
 const { expectLiteral: assertLiteral, expectNullableLiteral: assertNullableLiteral, expectNullableNumber: assertNullableNumber, expectNullableString: assertNullableString, expectNumber: assertRequiredNumber, expectRecord, expectString: assertRequiredString } = createJsonValidators(throwInvalidResponse);
-export function createMasumiPaymentClient({ apiUrl, apiToken, agentIdentifier, network = "Preprod", paymentUnit, fetchImpl = fetch, timeoutMs = 30000, now = () => new Date() } = {}) {
+export function createMasumiPaymentClient({ apiUrl, apiToken, agentIdentifier, network = "Preprod", paymentUnit, paymentSourceType, supportedPaymentSourceIndex, fetchImpl = fetch, timeoutMs = 30000, now = () => new Date() } = {}) {
     const baseUrl = normalizeMasumiApiUrl(apiUrl);
     const normalizedNetwork = normalizeMasumiNetwork(network);
     const unit = normalizeRequiredText(paymentUnit || MASUMI_USDM_UNITS[normalizedNetwork], "paymentUnit");
     const configuredAgentIdentifier = normalizeRequiredText(agentIdentifier, "agentIdentifier");
+    const configuredPaymentSource = normalizeMasumiPaymentSourceSelection(paymentSourceType, supportedPaymentSourceIndex);
     return {
         apiUrl: baseUrl,
         agentIdentifier: configuredAgentIdentifier,
@@ -30,6 +31,10 @@ export function createMasumiPaymentClient({ apiUrl, apiToken, agentIdentifier, n
                 amountRawUnits,
                 unit
             });
+            const inputOverridesPaymentSource = input.paymentSourceType !== undefined;
+            const selectedPaymentSource = normalizeMasumiPaymentSourceSelection(input.paymentSourceType ?? configuredPaymentSource.paymentSourceType, inputOverridesPaymentSource
+                ? input.supportedPaymentSourceIndex
+                : input.supportedPaymentSourceIndex ?? configuredPaymentSource.supportedPaymentSourceIndex);
             const body = {
                 agentIdentifier: normalizeRequiredText(input.agentIdentifier || configuredAgentIdentifier, "agentIdentifier"),
                 network: normalizeMasumiNetwork(input.network || normalizedNetwork),
@@ -42,7 +47,8 @@ export function createMasumiPaymentClient({ apiUrl, apiToken, agentIdentifier, n
                     amountRawUnits: amountRawUnits.toString()
                 }),
                 identifierFromPurchaser: normalizeHex(input.identifierFromPurchaser || randomBytes(8).toString("hex"), "identifierFromPurchaser"),
-                RequestedFunds: requestedFunds
+                RequestedFunds: requestedFunds,
+                ...selectedPaymentSource
             };
             const payload = await request("/payment", {
                 method: "POST",

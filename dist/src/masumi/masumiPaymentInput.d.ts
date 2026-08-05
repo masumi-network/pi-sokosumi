@@ -1,5 +1,6 @@
-import { type MasumiAmount, type MasumiCreatePaymentInput, type MasumiDateInput, type MasumiNetwork, type MasumiRequestedFundInput } from "./masumiPaymentTypes.js";
+import { type MasumiAmount, type MasumiCreatePaymentInput, type MasumiDateInput, type MasumiNetwork, type MasumiPaymentSourceSelection, type MasumiRequestedFundInput } from "./masumiPaymentTypes.js";
 export declare function normalizeMasumiNetwork(value: unknown): MasumiNetwork;
+export declare function normalizeMasumiPaymentSourceSelection(paymentSourceType: unknown, supportedPaymentSourceIndex: unknown): MasumiPaymentSourceSelection;
 export declare function normalizeMasumiApiUrl(value: unknown): string;
 export declare function resolveMasumiCostCents(input: MasumiCreatePaymentInput): bigint;
 export declare function resolveMasumiAmountRawUnits(input: MasumiCreatePaymentInput, costCents: bigint): bigint;

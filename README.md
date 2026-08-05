@@ -203,7 +203,9 @@ const masumiClient = createMasumiPaymentClient({
   apiUrl: process.env.MASUMI_PAYMENT_API_URL,
   apiToken: process.env.MASUMI_PAYMENT_API_TOKEN,
   agentIdentifier,
-  network: normalizeMasumiNetwork(process.env.MASUMI_NETWORK || "Preprod")
+  network: normalizeMasumiNetwork(process.env.MASUMI_NETWORK || "Preprod"),
+  paymentSourceType: "Web3CardanoV2",
+  supportedPaymentSourceIndex: 0
 });
 
 const store = createMemoryMasumiPaymentStore();

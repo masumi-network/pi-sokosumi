@@ -127,6 +127,7 @@ import {
   normalizeMasumiApiUrl,
   normalizeMasumiCostCents,
   normalizeMasumiNetwork,
+  normalizeMasumiPaymentSourceSelection,
   normalizeMasumiRawUnits,
   normalizePendingPayment,
   sha256Hex,
@@ -138,6 +139,7 @@ import {
   type MasumiPayment,
   type MasumiPaymentClientOptions,
   type MasumiPaymentDetails,
+  type MasumiPaymentSourceSelection,
   type MasumiPaymentPollerOptions,
   type MasumiPaymentStore,
   type MasumiPendingPaymentRecord,
@@ -729,6 +731,22 @@ const masumiOptions: MasumiPaymentClientOptions = {
   timeoutMs: 5000,
   now: () => new Date()
 };
+const masumiV2Options: MasumiPaymentClientOptions = {
+  ...masumiOptions,
+  paymentSourceType: "Web3CardanoV2",
+  supportedPaymentSourceIndex: 0
+};
+const masumiV2Selection: MasumiPaymentSourceSelection = normalizeMasumiPaymentSourceSelection(
+  masumiV2Options.paymentSourceType,
+  masumiV2Options.supportedPaymentSourceIndex
+);
+void masumiV2Selection;
+// @ts-expect-error Explicit Web3CardanoV2 selection requires a source index.
+const invalidMasumiV2Options: MasumiPaymentClientOptions = {
+  ...masumiOptions,
+  paymentSourceType: "Web3CardanoV2"
+};
+void invalidMasumiV2Options;
 const masumiClient = createMasumiPaymentClient(masumiOptions);
 void masumiClient.createPayment({
   taskId: "task-1",
@@ -746,7 +764,9 @@ void masumiClient.createPayment({
   network: "Mainnet",
   inputHash: "abc123",
   metadata: { source: "type-test" },
-  identifierFromPurchaser: "0011223344556677"
+  identifierFromPurchaser: "0011223344556677",
+  paymentSourceType: "Web3CardanoV2",
+  supportedPaymentSourceIndex: 1
 });
 void masumiClient.listPayments({
   network: "Preprod",
