@@ -44,6 +44,10 @@ For an agent registered with a `Web3CardanoV2` payment source, set
 selects the corresponding source in the agent's registry metadata. Explicit V2
 selection requires an index; explicit `Web3CardanoV1` selection forbids one.
 Both fields can also be supplied per payment to override the client defaults.
+Payment listing also uses the configured source type by default so settlement
+polling reads the same V1 or V2 source that payment creation selected. An
+explicit smart-contract-address filter remains authoritative and does not add a
+source-type filter unless the caller supplies one.
 
 ## Amounts
 

@@ -35,6 +35,7 @@ import {
   normalizeHex,
   normalizeMasumiApiUrl,
   normalizeMasumiNetwork,
+  normalizeOptionalMasumiPaymentSourceType,
   normalizeMasumiPaymentSourceSelection,
   normalizePaymentMetadata,
   normalizePositiveInteger,
@@ -154,6 +155,12 @@ export function createMasumiPaymentClient({
       search.set("limit", String(normalizePositiveInteger(input.limit, 100)));
       if (input.cursorId) search.set("cursorId", String(input.cursorId));
       if (input.filterSmartContractAddress) search.set("filterSmartContractAddress", String(input.filterSmartContractAddress));
+      const filterPaymentSourceType = normalizeOptionalMasumiPaymentSourceType(
+        input.filterPaymentSourceType ?? (
+          input.filterSmartContractAddress ? undefined : configuredPaymentSource.paymentSourceType
+        )
+      );
+      if (filterPaymentSourceType) search.set("filterPaymentSourceType", filterPaymentSourceType);
       if (input.includeHistory !== undefined) search.set("includeHistory", input.includeHistory ? "true" : "false");
 
       const payload = await request(`/payment?${search.toString()}`);

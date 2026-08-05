@@ -3,7 +3,8 @@
 ## Unreleased
 
 - Added typed `Web3CardanoV2` payment-source selection to Masumi payment
-  creation, including the required supported-source index and runtime validation.
+  creation and listing, including the required supported-source index, runtime
+  validation, and source-aware settlement polling.
 
 ## 0.1.6
 

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { requestJson } from "../jsonHttpTransport.js";
 import { createJsonValidators, isRecord } from "../sharedTypes.js";
 import { MASUMI_DEFAULT_PAY_BY_MS, MASUMI_DEFAULT_SUBMIT_RESULT_MS, MASUMI_NETWORKS, MASUMI_ON_CHAIN_STATES, MASUMI_PAYMENT_ACTIONS, MASUMI_PAYMENT_ERROR_TYPES, MASUMI_PAYMENT_SOURCE_TYPES, MASUMI_PRICING_TYPES, MASUMI_TRANSACTION_STATUSES, MASUMI_USDM_UNITS, MasumiPaymentError } from "./masumiPaymentTypes.js";
-import { addMs, normalizeHex, normalizeMasumiApiUrl, normalizeMasumiNetwork, normalizeMasumiPaymentSourceSelection, normalizePaymentMetadata, normalizePositiveInteger, normalizeRequestedFunds, normalizeRequiredText, resolveMasumiAmountRawUnits, resolveMasumiCostCents, toDate } from "./masumiPaymentInput.js";
+import { addMs, normalizeHex, normalizeMasumiApiUrl, normalizeMasumiNetwork, normalizeOptionalMasumiPaymentSourceType, normalizeMasumiPaymentSourceSelection, normalizePaymentMetadata, normalizePositiveInteger, normalizeRequestedFunds, normalizeRequiredText, resolveMasumiAmountRawUnits, resolveMasumiCostCents, toDate } from "./masumiPaymentInput.js";
 import { sha256Hex } from "./masumiSerialization.js";
 export * from "./masumiPaymentTypes.js";
 export * from "./masumiAmounts.js";
@@ -70,6 +70,9 @@ export function createMasumiPaymentClient({ apiUrl, apiToken, agentIdentifier, n
                 search.set("cursorId", String(input.cursorId));
             if (input.filterSmartContractAddress)
                 search.set("filterSmartContractAddress", String(input.filterSmartContractAddress));
+            const filterPaymentSourceType = normalizeOptionalMasumiPaymentSourceType(input.filterPaymentSourceType ?? (input.filterSmartContractAddress ? undefined : configuredPaymentSource.paymentSourceType));
+            if (filterPaymentSourceType)
+                search.set("filterPaymentSourceType", filterPaymentSourceType);
             if (input.includeHistory !== undefined)
                 search.set("includeHistory", input.includeHistory ? "true" : "false");
             const payload = await request(`/payment?${search.toString()}`);

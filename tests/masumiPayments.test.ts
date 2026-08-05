@@ -132,6 +132,43 @@ test("Masumi payment client sends Web3CardanoV2 payment source selection", async
   assert.equal(payment.requestBody.supportedPaymentSourceIndex, 0);
 });
 
+test("Masumi payment client lists the configured Web3CardanoV2 source", async () => {
+  const requests: string[] = [];
+  const client = createMasumiPaymentClient({
+    apiUrl: "https://masumi.example.test/api/v1",
+    apiToken: "payment-token",
+    agentIdentifier: "agent-v2-list",
+    network: "Preprod",
+    paymentSourceType: "Web3CardanoV2",
+    supportedPaymentSourceIndex: 0,
+    async fetchImpl(url: string) {
+      requests.push(url);
+      return jsonResponse({
+        status: "success",
+        data: {
+          Payments: [masumiPaymentResponse({
+            id: "payment-v2-list",
+            blockchainIdentifier: "blockchain-v2-list",
+            agentIdentifier: "agent-v2-list",
+            PaymentSource: {
+              id: "source-v2-list",
+              network: "Preprod",
+              paymentSourceType: "Web3CardanoV2",
+              smartContractAddress: "addr_test_v2_list_contract",
+              policyId: "policy-v2-list"
+            }
+          })]
+        }
+      });
+    }
+  });
+
+  await client.listPayments({ limit: 100 });
+
+  const requestUrl = new URL(requests[0]);
+  assert.equal(requestUrl.searchParams.get("filterPaymentSourceType"), "Web3CardanoV2");
+});
+
 test("Masumi payment client validates Cardano payment source selection", async () => {
   const baseOptions = {
     apiUrl: "https://masumi.example.test/api/v1",

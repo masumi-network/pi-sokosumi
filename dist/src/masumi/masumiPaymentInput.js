@@ -104,7 +104,7 @@ export function normalizePositiveInteger(value, fallback) {
     const number = Number(value);
     return Number.isInteger(number) && number > 0 ? number : fallback;
 }
-function normalizeOptionalMasumiPaymentSourceType(value) {
+export function normalizeOptionalMasumiPaymentSourceType(value) {
     const text = normalizeText(value);
     if (!text)
         return undefined;

@@ -135,7 +135,7 @@ export function normalizePositiveInteger(value: unknown, fallback: number): numb
   return Number.isInteger(number) && number > 0 ? number : fallback;
 }
 
-function normalizeOptionalMasumiPaymentSourceType(value: unknown): MasumiPaymentSourceType | undefined {
+export function normalizeOptionalMasumiPaymentSourceType(value: unknown): MasumiPaymentSourceType | undefined {
   const text = normalizeText(value);
   if (!text) return undefined;
   const sourceType = MASUMI_PAYMENT_SOURCE_TYPES.find((candidate) => candidate === text);
