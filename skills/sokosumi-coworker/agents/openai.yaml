@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sokosumi Coworker"
+  short_description: "Implement a production-ready Sokosumi coworker"
+  default_prompt: "Use $sokosumi-coworker to integrate this agent with Sokosumi and verify every task lifecycle path."
