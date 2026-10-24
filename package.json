@@ -97,7 +97,7 @@
     "typescript": "^5.8.3"
   },
   "engines": {
-    "node": ">=22.19.0"
+    "node": ">=22.23.4"
   },
   "pi": {
     "extensions": [
